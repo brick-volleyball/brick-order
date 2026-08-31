@@ -1,0 +1,1213 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>チーム名簿マネージャー</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@500;700;900&family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#F5F7FA;
+    --surface:#FFFFFF;
+    --surface-2:#EEF2F6;
+    --border:#DCE3EB;
+    --text:#1B222C;
+    --text-muted:#5B6472;
+    --accent:#EA6A2E;
+    --accent-ink:#FFFFFF;
+    --accent-soft:#FCE3D2;
+    --structure:#1F3A5B;
+    --structure-ink:#F3F7FB;
+    --good:#2E8B57;
+    --good-soft:#DCEEE3;
+    --danger:#C43B3B;
+    --danger-soft:#F6DEDE;
+    --focus:#3E7CB8;
+    --shadow: 0 1px 2px rgba(20,30,45,.06), 0 8px 24px rgba(20,30,45,.08);
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#11151C;
+      --surface:#1A2028;
+      --surface-2:#212936;
+      --border:#2B3341;
+      --text:#E8ECF2;
+      --text-muted:#97A2B4;
+      --accent:#FF8A4C;
+      --accent-ink:#241205;
+      --accent-soft:#3A2415;
+      --structure:#0D2340;
+      --structure-ink:#EAF1F8;
+      --good:#4FBE84;
+      --good-soft:#173026;
+      --danger:#E2695F;
+      --danger-soft:#3A1E1C;
+      --focus:#6AA9E0;
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.35);
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#11151C;
+    --surface:#1A2028;
+    --surface-2:#212936;
+    --border:#2B3341;
+    --text:#E8ECF2;
+    --text-muted:#97A2B4;
+    --accent:#FF8A4C;
+    --accent-ink:#241205;
+    --accent-soft:#3A2415;
+    --structure:#0D2340;
+    --structure-ink:#EAF1F8;
+    --good:#4FBE84;
+    --good-soft:#173026;
+    --danger:#E2695F;
+    --danger-soft:#3A1E1C;
+    --focus:#6AA9E0;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.35);
+  }
+
+  *{ box-sizing:border-box; }
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--text);
+    font-family:"Noto Sans JP","Zen Kaku Gothic New",-apple-system,BlinkMacSystemFont,sans-serif;
+    font-size:15px;
+    line-height:1.55;
+    -webkit-font-smoothing:antialiased;
+  }
+  h1,h2,h3,.disp{ font-family:"Zen Kaku Gothic New","Noto Sans JP",sans-serif; text-wrap:balance; }
+  button{ font-family:inherit; }
+  input,select{ font-family:inherit; font-size:15px; }
+  .num{ font-variant-numeric:tabular-nums; }
+
+  #shell{ max-width:1080px; margin:0 auto; min-height:100vh; display:flex; flex-direction:column; }
+
+  header.app-header{
+    background:var(--structure);
+    color:var(--structure-ink);
+    padding:16px 20px 14px;
+  }
+  header.app-header .title-row{ display:flex; align-items:baseline; gap:10px; flex-wrap:wrap; }
+  header.app-header h1{ font-size:20px; font-weight:900; margin:0; letter-spacing:.02em; }
+  header.app-header .tagline{ font-size:12px; color:rgba(243,247,251,.68); margin:2px 0 0; }
+
+  nav.tabs{
+    display:flex;
+    gap:4px;
+    background:var(--surface);
+    border-bottom:1px solid var(--border);
+    padding:0 12px;
+    position:sticky;
+    top:0;
+    z-index:10;
+    overflow-x:auto;
+  }
+  .tab-btn{
+    appearance:none; border:none; background:transparent; cursor:pointer;
+    padding:12px 14px 10px; font-size:14px; font-weight:700; color:var(--text-muted);
+    border-bottom:3px solid transparent; white-space:nowrap;
+  }
+  .tab-btn.active{ color:var(--accent); border-bottom-color:var(--accent); }
+  .tab-btn:focus-visible, button:focus-visible, [tabindex]:focus-visible, input:focus-visible, select:focus-visible{
+    outline:2px solid var(--focus); outline-offset:2px;
+  }
+
+  .status-bar{
+    display:flex; align-items:center; gap:8px;
+    padding:8px 20px; font-size:12.5px; color:var(--text-muted);
+    background:var(--surface); border-bottom:1px solid var(--border);
+  }
+  .status-dot{ width:8px; height:8px; border-radius:50%; background:var(--text-muted); flex:none; }
+  .status-bar.saved .status-dot{ background:var(--good); }
+  .status-bar.saving .status-dot{ background:var(--focus); animation:pulse 1s infinite ease-in-out; }
+  .status-bar.pending .status-dot{ background:var(--accent); }
+  .status-bar.readonly .status-dot,.status-bar.error .status-dot{ background:var(--danger); }
+  @keyframes pulse{ 0%,100%{opacity:1;} 50%{opacity:.35;} }
+  @media (prefers-reduced-motion: reduce){ .status-bar.saving .status-dot{ animation:none; } }
+
+  main#app{ flex:1; padding:16px 16px 64px; }
+  @media (min-width:640px){ main#app{ padding:24px 24px 72px; } }
+
+  .section-head{ display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:14px; flex-wrap:wrap; }
+  .section-head h2{ font-size:17px; font-weight:700; margin:0; }
+  .section-sub{ font-size:12.5px; color:var(--text-muted); margin-top:2px; }
+
+  .btn{
+    appearance:none; border:1px solid var(--border); background:var(--surface); color:var(--text);
+    border-radius:9px; padding:9px 14px; font-size:13.5px; font-weight:700; cursor:pointer;
+    display:inline-flex; align-items:center; gap:6px; white-space:nowrap;
+  }
+  .btn:hover{ border-color:var(--accent); }
+  .btn:disabled{ opacity:.45; cursor:not-allowed; }
+  .btn-primary{ background:var(--accent); border-color:var(--accent); color:var(--accent-ink); }
+  .btn-primary:hover{ filter:brightness(1.05); border-color:var(--accent); }
+  .btn-ghost{ background:transparent; border-color:transparent; color:var(--text-muted); padding:7px 8px; }
+  .btn-ghost:hover{ color:var(--danger); border-color:transparent; }
+  .btn-sm{ padding:6px 10px; font-size:12.5px; border-radius:7px; }
+  .btn-danger{ background:var(--danger); border-color:var(--danger); color:#fff; }
+
+  .empty-state{
+    border:1.5px dashed var(--border); border-radius:14px; padding:32px 20px; text-align:center;
+    color:var(--text-muted); font-size:13.5px; background:var(--surface);
+  }
+
+  /* ---- Members tab ---- */
+  .member-list{ display:flex; flex-direction:column; gap:8px; }
+  .member-card{
+    display:flex; align-items:center; gap:12px; background:var(--surface); border:1px solid var(--border);
+    border-radius:12px; padding:10px 12px; box-shadow:var(--shadow);
+  }
+  .num-badge{
+    flex:none; width:42px; height:42px; border-radius:9px; background:var(--structure); color:var(--structure-ink);
+    display:flex; align-items:center; justify-content:center; font-family:"Zen Kaku Gothic New"; font-weight:900; font-size:16px;
+  }
+  .member-card .info{ flex:1; min-width:0; }
+  .member-card .name-row{ display:flex; align-items:baseline; gap:6px; flex-wrap:wrap; }
+  .member-card .name{ font-weight:700; font-size:14.5px; }
+  .member-card .nick{ font-size:12.5px; color:var(--text-muted); }
+  .member-card .meta{ font-size:11.5px; color:var(--text-muted); margin-top:3px; display:flex; gap:10px; flex-wrap:wrap; }
+  .member-card .actions{ display:flex; gap:2px; flex:none; }
+  .confirm-row{ display:flex; align-items:center; gap:8px; font-size:12.5px; background:var(--danger-soft); border-radius:9px; padding:6px 10px; }
+
+  /* ---- Tournament tab ---- */
+  .tourn-layout{ display:flex; flex-direction:column; gap:18px; }
+  @media (min-width:760px){ .tourn-layout{ flex-direction:row; align-items:flex-start; } }
+  .tourn-list-col{ flex:0 0 260px; display:flex; flex-direction:column; gap:8px; }
+  .tourn-detail-col{ flex:1; min-width:0; display:flex; flex-direction:column; gap:18px; }
+  .tourn-card{
+    background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:11px 12px; cursor:pointer;
+    box-shadow:var(--shadow);
+  }
+  .tourn-card.active{ border-color:var(--accent); box-shadow:0 0 0 2px var(--accent-soft); }
+  .tourn-card .t-name{ font-weight:700; font-size:14px; }
+  .tourn-card .t-date{ font-size:12px; color:var(--text-muted); margin-top:2px; }
+  .tourn-card .t-count{ font-size:11.5px; color:var(--accent); margin-top:4px; font-weight:700; }
+  .tourn-card-row{ display:flex; align-items:flex-start; justify-content:space-between; gap:6px; }
+
+  .chip-grid{ display:flex; flex-wrap:wrap; gap:8px; }
+  .pick-chip{
+    display:flex; align-items:center; gap:7px; border:1.5px solid var(--border); background:var(--surface);
+    border-radius:999px; padding:6px 12px 6px 8px; cursor:pointer; font-size:13px; font-weight:600;
+  }
+  .pick-chip .n{ background:var(--surface-2); border-radius:999px; min-width:22px; height:22px; padding:0 4px; display:flex; align-items:center; justify-content:center; font-size:11.5px; font-weight:800; }
+  .pick-chip.selected{ border-color:var(--good); background:var(--good-soft); }
+  .pick-chip.selected .n{ background:var(--good); color:#fff; }
+
+  table.roster-table{ width:100%; border-collapse:collapse; background:var(--surface); border:1px solid var(--border); border-radius:12px; overflow:hidden; }
+  table.roster-table th,table.roster-table td{ text-align:left; padding:8px 10px; font-size:13px; border-bottom:1px solid var(--border); }
+  table.roster-table th{ background:var(--surface-2); color:var(--text-muted); font-weight:700; font-size:11.5px; text-transform:uppercase; letter-spacing:.04em; }
+  table.roster-table tr:last-child td{ border-bottom:none; }
+  .table-wrap{ overflow-x:auto; border-radius:12px; }
+
+  /* ---- Serve tab ---- */
+  .set-pills{ display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
+  .set-pill{
+    border:1.5px solid var(--border); background:var(--surface); border-radius:999px; padding:6px 14px;
+    font-size:12.5px; font-weight:700; cursor:pointer; color:var(--text-muted);
+  }
+  .set-pill.active{ background:var(--structure); color:var(--structure-ink); border-color:var(--structure); }
+
+  .serve-layout{ display:flex; flex-direction:column; gap:18px; margin-top:16px; }
+  @media (min-width:760px){ .serve-layout{ flex-direction:row; } }
+  .court-col{ flex:1.1; min-width:0; }
+  .bench-col{ flex:0.8; min-width:0; }
+
+  .slot-list{ display:flex; flex-direction:column; gap:6px; }
+  .slot{
+    display:flex; align-items:center; gap:10px; min-height:52px; border-radius:11px; padding:6px 8px 6px 6px;
+    border:1.5px dashed var(--border); background:var(--surface-2);
+  }
+  .slot.drag-over{ border-color:var(--accent); background:var(--accent-soft); }
+  .slot .order-num{
+    flex:none; width:30px; height:30px; border-radius:8px; background:var(--structure); color:var(--structure-ink);
+    display:flex; align-items:center; justify-content:center; font-weight:800; font-size:13px; font-family:"Zen Kaku Gothic New";
+  }
+  .slot.bench .order-num{ background:var(--text-muted); }
+  .slot-placeholder{ flex:1; font-size:12px; color:var(--text-muted); padding:6px 4px; cursor:pointer; }
+  .slot.armable{ border-color:var(--focus); }
+
+  .chip{
+    display:flex; align-items:center; gap:8px; background:var(--surface); border:1.5px solid var(--border);
+    border-radius:9px; padding:6px 8px; cursor:grab; flex:1; min-width:0;
+  }
+  .chip.armed{ border-color:var(--accent); box-shadow:0 0 0 2px var(--accent-soft); }
+  .chip.dragging{ opacity:.4; }
+  .chip .cn{ flex:none; width:26px; height:26px; border-radius:7px; background:var(--structure); color:var(--structure-ink); display:flex; align-items:center; justify-content:center; font-size:11.5px; font-weight:800; }
+  .chip .cname{ font-size:13px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .chip .rm{ flex:none; margin-left:auto; background:none; border:none; color:var(--text-muted); cursor:pointer; font-size:15px; line-height:1; padding:2px 4px; }
+  .chip .rm:hover{ color:var(--danger); }
+
+  .pool-zone{
+    border:1.5px dashed var(--border); border-radius:12px; padding:10px; margin-top:8px; min-height:60px;
+    display:flex; flex-wrap:wrap; gap:8px; align-content:flex-start;
+  }
+  .pool-zone.drag-over{ border-color:var(--accent); background:var(--accent-soft); }
+  .pool-zone .chip{ flex:0 0 auto; }
+  .col-label{ font-size:12.5px; font-weight:700; color:var(--text-muted); margin:0 0 8px; display:flex; align-items:center; justify-content:space-between; }
+  .hint{ font-size:11.5px; color:var(--text-muted); margin-top:8px; }
+
+  /* ---- Modal ---- */
+  .modal-overlay{
+    position:fixed; inset:0; background:rgba(15,20,28,.5); display:flex; align-items:flex-end; justify-content:center;
+    z-index:100; padding:0;
+  }
+  @media (min-width:640px){ .modal-overlay{ align-items:center; padding:20px; } }
+  .modal-card{
+    background:var(--surface); width:100%; max-width:480px; border-radius:16px 16px 0 0; padding:20px 20px 24px;
+    max-height:90vh; overflow-y:auto; box-shadow:var(--shadow);
+  }
+  @media (min-width:640px){ .modal-card{ border-radius:16px; } }
+  .modal-card h3{ margin:0 0 14px; font-size:16px; }
+  .field{ margin-bottom:12px; }
+  .field label{ display:block; font-size:12px; font-weight:700; color:var(--text-muted); margin-bottom:4px; }
+  .field input,.field select{
+    width:100%; padding:9px 10px; border:1.5px solid var(--border); border-radius:8px; background:var(--bg); color:var(--text);
+  }
+  .field-row{ display:flex; gap:10px; }
+  .field-row .field{ flex:1; }
+  .form-error{ color:var(--danger); font-size:12.5px; margin-bottom:10px; min-height:1em; }
+  .modal-actions{ display:flex; justify-content:flex-end; gap:8px; margin-top:16px; }
+
+  .badge-readonly{ background:var(--danger-soft); color:var(--danger); border-radius:999px; padding:2px 10px; font-size:11.5px; font-weight:700; }
+  .visually-hidden{ position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0,0,0,0); }
+
+  .header-actions{ display:flex; gap:8px; margin-top:12px; flex-wrap:wrap; }
+  .btn-header{
+    background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.28); color:var(--structure-ink);
+    border-radius:8px; padding:6px 11px; font-size:12px; font-weight:700; cursor:pointer;
+  }
+  .btn-header:hover{ background:rgba(255,255,255,.16); }
+  .import-summary{ font-size:13px; line-height:1.7; margin:0 0 14px; }
+  .import-summary b{ color:var(--accent); }
+</style>
+</head>
+<body>
+<div id="shell">
+  <header class="app-header">
+    <div class="title-row">
+      <h1>チーム名簿マネージャー</h1>
+    </div>
+    <p class="tagline">メンバー登録・大会参加者・サーブ順をまとめて管理</p>
+    <div class="header-actions">
+      <button type="button" class="btn-header" data-action="export-data">⬇ データを書き出し</button>
+      <button type="button" class="btn-header" data-action="trigger-import">⬆ データを読み込み</button>
+      <input type="file" id="import-file" accept="application/json,.json" class="visually-hidden">
+    </div>
+  </header>
+
+  <nav class="tabs" role="tablist" aria-label="画面切り替え">
+    <button type="button" class="tab-btn active" data-action="switch-tab" data-tab="members">メンバー管理</button>
+    <button type="button" class="tab-btn" data-action="switch-tab" data-tab="tournament">大会・参加者</button>
+    <button type="button" class="tab-btn" data-action="switch-tab" data-tab="serve">サーブ順</button>
+  </nav>
+
+  <div class="status-bar" id="status-bar">
+    <span class="status-dot"></span>
+    <span id="status-text">読み込み中…</span>
+  </div>
+
+  <main id="app"></main>
+  <div id="modal-root"></div>
+</div>
+
+<script type="application/json" id="initial-state">
+{"members":[],"tournaments":[]}
+</script>
+
+<script>
+(function(){
+  "use strict";
+
+  var LS_KEY = "roster_manager_state_v1";
+  var GENDERS = ["男性","女性","その他","回答しない"];
+
+  var appState = null;
+  var ui = {
+    activeTab: "members",
+    currentTournamentId: null,
+    currentSetId: null,
+    armed: null,
+    isWriter: true,
+    mode: null,
+    saveStatus: "idle",
+    memberModal: null,
+    tournamentModal: null,
+    confirmDeleteMember: null,
+    confirmDeleteTournament: null,
+    confirmDeleteSet: null,
+    pendingImport: null
+  };
+  var saveTimer = null;
+  var dragData = null;
+
+  function uid(prefix){
+    return prefix + Math.random().toString(36).slice(2,9) + Date.now().toString(36).slice(-4);
+  }
+  function escapeHtml(s){
+    return String(s==null?"":s).replace(/[&<>"']/g, function(c){
+      return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c];
+    });
+  }
+  function defaultState(){ return { members: [], tournaments: [] }; }
+
+  /* ---------------- persistence ---------------- */
+
+  async function loadInitialState(){
+    try{
+      var res = await fetch("data/state.json", { cache: "no-store" });
+      if(res.ok){
+        var data = await res.json();
+        if(data && typeof data === "object") return normalizeState(data);
+      }
+    }catch(e){ /* fall through */ }
+    try{
+      var ls = localStorage.getItem(LS_KEY);
+      if(ls) return normalizeState(JSON.parse(ls));
+    }catch(e){}
+    var embedded = document.getElementById("initial-state");
+    if(embedded){
+      try{ return normalizeState(JSON.parse(embedded.textContent)); }catch(e){}
+    }
+    return defaultState();
+  }
+
+  function normalizeState(data){
+    var s = defaultState();
+    if(Array.isArray(data.members)) s.members = data.members;
+    if(Array.isArray(data.tournaments)){
+      s.tournaments = data.tournaments.map(function(t){
+        t.participantIds = Array.isArray(t.participantIds) ? t.participantIds : [];
+        t.sets = Array.isArray(t.sets) ? t.sets : [];
+        t.sets.forEach(function(st){
+          st.order = normalizeSlots(st.order, 9);
+          st.bench = normalizeSlots(st.bench, 6);
+        });
+        return t;
+      });
+    }
+    return s;
+  }
+  function normalizeSlots(arr, len){
+    var out = Array(len).fill(null);
+    if(Array.isArray(arr)){ for(var i=0;i<len;i++){ out[i] = arr[i] || null; } }
+    return out;
+  }
+
+  function exportData(){
+    var blob = new Blob([JSON.stringify(appState, null, 2)], { type: "application/json" });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    var ts = new Date().toISOString().slice(0,10);
+    a.href = url;
+    a.download = "roster-data-" + ts + ".json";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function(){ URL.revokeObjectURL(url); }, 1000);
+  }
+
+  function triggerImport(){
+    var input = document.getElementById("import-file");
+    if(input) input.click();
+  }
+
+  function handleImportFile(file){
+    var reader = new FileReader();
+    reader.onload = function(){
+      try{
+        var data = JSON.parse(String(reader.result));
+        ui.pendingImport = data;
+        renderModalRoot();
+      }catch(err){
+        alert("JSONファイルを読み込めませんでした。ファイルの内容をご確認ください。");
+      }
+    };
+    reader.onerror = function(){
+      alert("ファイルの読み込みに失敗しました。");
+    };
+    reader.readAsText(file);
+  }
+
+  function confirmImport(){
+    if(!ui.pendingImport) return;
+    appState = normalizeState(ui.pendingImport);
+    ui.pendingImport = null;
+    ui.currentTournamentId = null;
+    ui.currentSetId = null;
+    ui.armed = null;
+    closeModal();
+    renderApp();
+    scheduleSave();
+  }
+  function cancelImport(){
+    ui.pendingImport = null;
+    renderModalRoot();
+  }
+
+  function scheduleSave(){
+    ui.saveStatus = "pending";
+    updateStatusBar();
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(doSave, 900);
+  }
+
+  async function doSave(){
+    try{
+      localStorage.setItem(LS_KEY, JSON.stringify(appState));
+      ui.saveStatus = "saved";
+    }catch(e){ ui.saveStatus = "error"; }
+    updateStatusBar();
+  }
+
+  function updateStatusBar(){
+    var bar = document.getElementById("status-bar");
+    var text = document.getElementById("status-text");
+    if(!bar || !text) return;
+    bar.className = "status-bar " + ui.saveStatus;
+    var map = {
+      idle: "読み込み中…",
+      saved: "この端末に保存済み（書き出してチームと共有できます）",
+      pending: "未保存の変更があります",
+      error: "この端末への保存に失敗しました（ブラウザの設定をご確認ください）"
+    };
+    text.textContent = map[ui.saveStatus] || "";
+  }
+
+  /* ---------------- data helpers ---------------- */
+
+  function memberById(id){ return appState.members.find(function(m){ return m.id === id; }); }
+  function sortedMembers(list){
+    return list.slice().sort(function(a,b){
+      var an = parseInt(a.number,10), bn = parseInt(b.number,10);
+      var av = !isNaN(an), bv = !isNaN(bn);
+      if(av && bv) return an - bn;
+      if(av) return -1;
+      if(bv) return 1;
+      return (a.number||"").localeCompare(b.number||"");
+    });
+  }
+  function currentTournament(){
+    return appState.tournaments.find(function(t){ return t.id === ui.currentTournamentId; }) || null;
+  }
+  function currentSet(){
+    var t = currentTournament();
+    if(!t) return null;
+    return (t.sets||[]).find(function(s){ return s.id === ui.currentSetId; }) || null;
+  }
+  function syncCurrentSetId(){
+    var t = currentTournament();
+    if(!t){ ui.currentSetId = null; return; }
+    if(!t.sets) t.sets = [];
+    if(!t.sets.some(function(s){ return s.id === ui.currentSetId; })){
+      ui.currentSetId = t.sets.length ? t.sets[0].id : null;
+    }
+  }
+
+  function requireWriter(){
+    return true;
+  }
+
+  /* ---------------- mutations ---------------- */
+
+  function deleteMember(id){
+    appState.members = appState.members.filter(function(m){ return m.id !== id; });
+    appState.tournaments.forEach(function(t){
+      t.participantIds = t.participantIds.filter(function(pid){ return pid !== id; });
+      (t.sets||[]).forEach(function(s){
+        s.order = s.order.map(function(x){ return x === id ? null : x; });
+        s.bench = s.bench.map(function(x){ return x === id ? null : x; });
+      });
+    });
+    ui.confirmDeleteMember = null;
+    renderApp();
+    scheduleSave();
+  }
+
+  function saveMemberFromForm(id){
+    var name = document.getElementById("f-name").value.trim();
+    var number = document.getElementById("f-number").value.trim();
+    var errEl = document.getElementById("form-error");
+    if(!name || !number){
+      if(errEl) errEl.textContent = "名前と背番号は必須です";
+      return;
+    }
+    var data = {
+      name: name,
+      number: number,
+      nickname: document.getElementById("f-nickname").value.trim(),
+      birthdate: document.getElementById("f-birthdate").value,
+      gender: document.getElementById("f-gender").value,
+      region: document.getElementById("f-region").value.trim(),
+      school: document.getElementById("f-school").value.trim()
+    };
+    if(id){
+      var m = memberById(id);
+      if(m) Object.assign(m, data);
+    } else {
+      data.id = uid("m_");
+      appState.members.push(data);
+    }
+    closeModal();
+    renderApp();
+    scheduleSave();
+  }
+
+  function deleteTournament(id){
+    appState.tournaments = appState.tournaments.filter(function(t){ return t.id !== id; });
+    if(ui.currentTournamentId === id){ ui.currentTournamentId = null; ui.currentSetId = null; }
+    ui.confirmDeleteTournament = null;
+    renderApp();
+    scheduleSave();
+  }
+
+  function saveTournamentFromForm(id){
+    var name = document.getElementById("tf-name").value.trim();
+    var date = document.getElementById("tf-date").value;
+    var errEl = document.getElementById("form-error");
+    if(!name){
+      if(errEl) errEl.textContent = "大会名は必須です";
+      return;
+    }
+    if(id){
+      var t = currentTournamentByIdAll(id);
+      if(t){ t.name = name; t.date = date; }
+    } else {
+      var nt = { id: uid("t_"), name: name, date: date, participantIds: [], sets: [] };
+      appState.tournaments.push(nt);
+      ui.currentTournamentId = nt.id;
+    }
+    closeModal();
+    syncCurrentSetId();
+    renderApp();
+    scheduleSave();
+  }
+  function currentTournamentByIdAll(id){
+    return appState.tournaments.find(function(t){ return t.id === id; });
+  }
+
+  function toggleParticipant(memberId){
+    var t = currentTournament();
+    if(!t) return;
+    var idx = t.participantIds.indexOf(memberId);
+    if(idx >= 0){
+      t.participantIds.splice(idx,1);
+      (t.sets||[]).forEach(function(s){
+        s.order = s.order.map(function(x){ return x === memberId ? null : x; });
+        s.bench = s.bench.map(function(x){ return x === memberId ? null : x; });
+      });
+    } else {
+      t.participantIds.push(memberId);
+    }
+    renderApp();
+    scheduleSave();
+  }
+
+  function addSet(){
+    var t = currentTournament();
+    if(!t) return;
+    if(!t.sets) t.sets = [];
+    var s = { id: uid("set_"), order: Array(9).fill(null), bench: Array(6).fill(null) };
+    t.sets.push(s);
+    ui.currentSetId = s.id;
+    renderApp();
+    scheduleSave();
+  }
+  function deleteSet(id){
+    var t = currentTournament();
+    if(!t) return;
+    t.sets = t.sets.filter(function(s){ return s.id !== id; });
+    ui.confirmDeleteSet = null;
+    if(ui.currentSetId === id){
+      ui.currentSetId = t.sets.length ? t.sets[0].id : null;
+    }
+    renderApp();
+    scheduleSave();
+  }
+  function copyPrevSet(){
+    var t = currentTournament();
+    if(!t) return;
+    var idx = t.sets.findIndex(function(s){ return s.id === ui.currentSetId; });
+    if(idx <= 0) return;
+    var prev = t.sets[idx-1];
+    var cur = t.sets[idx];
+    cur.order = prev.order.slice();
+    cur.bench = prev.bench.slice();
+    renderApp();
+    scheduleSave();
+  }
+
+  function sameLoc(a,b){
+    return a && b && a.type === b.type && a.idx === b.idx;
+  }
+  function moveMember(memberId, fromLoc, toLoc){
+    var set = currentSet();
+    if(!set) return;
+    if(fromLoc.type === "pool" && toLoc.type === "pool") return;
+    function arrOf(loc){
+      if(loc.type === "order") return set.order;
+      if(loc.type === "bench") return set.bench;
+      return null;
+    }
+    var fromArr = arrOf(fromLoc), toArr = arrOf(toLoc);
+    var targetOccupant = toArr ? toArr[toLoc.idx] : null;
+    if(fromArr) fromArr[fromLoc.idx] = null;
+    if(toArr){
+      if(targetOccupant && targetOccupant !== memberId){
+        if(fromArr){ fromArr[fromLoc.idx] = targetOccupant; }
+      }
+      toArr[toLoc.idx] = memberId;
+    }
+  }
+
+  function onChipTap(el){
+    var memberId = el.getAttribute("data-member-id");
+    var loc = { type: el.getAttribute("data-loc-type"), idx: el.hasAttribute("data-loc-idx") ? +el.getAttribute("data-loc-idx") : undefined };
+    if(ui.armed){
+      if(ui.armed.memberId === memberId && sameLoc(ui.armed.loc, loc)){
+        ui.armed = null;
+      } else {
+        moveMember(memberId, loc, ui.armed.loc);
+        ui.armed = null;
+        scheduleSave();
+      }
+    } else {
+      ui.armed = { memberId: memberId, loc: loc };
+    }
+    renderApp();
+  }
+  function onSlotTap(el){
+    if(!ui.armed) return;
+    var loc = { type: el.getAttribute("data-loc-type"), idx: el.hasAttribute("data-loc-idx") ? +el.getAttribute("data-loc-idx") : undefined };
+    moveMember(ui.armed.memberId, ui.armed.loc, loc);
+    ui.armed = null;
+    renderApp();
+    scheduleSave();
+  }
+  function onRemoveFromSlot(el){
+    var loc = { type: el.getAttribute("data-loc-type"), idx: +el.getAttribute("data-loc-idx") };
+    var memberId = el.getAttribute("data-member-id");
+    moveMember(memberId, loc, { type: "pool" });
+    if(ui.armed && ui.armed.memberId === memberId) ui.armed = null;
+    renderApp();
+    scheduleSave();
+  }
+
+  /* ---------------- rendering ---------------- */
+
+  function renderApp(){
+    var app = document.getElementById("app");
+    if(ui.activeTab === "members") app.innerHTML = renderMembersTab();
+    else if(ui.activeTab === "tournament") app.innerHTML = renderTournamentTab();
+    else app.innerHTML = renderServeTab();
+    document.querySelectorAll(".tab-btn").forEach(function(b){
+      b.classList.toggle("active", b.getAttribute("data-tab") === ui.activeTab);
+    });
+  }
+
+  function memberMetaLine(m){
+    var parts = [];
+    if(m.birthdate) parts.push(escapeHtml(m.birthdate));
+    if(m.gender) parts.push(escapeHtml(m.gender));
+    if(m.region) parts.push(escapeHtml(m.region));
+    if(m.school) parts.push(escapeHtml(m.school));
+    return parts.join(" ・ ");
+  }
+
+  function renderMembersTab(){
+    var members = sortedMembers(appState.members);
+    var addBtn = '<button type="button" class="btn btn-primary" data-action="add-member"' + (ui.isWriter?'':' disabled') + '>+ メンバーを追加</button>';
+    var html = '<div class="section-head"><div><h2>メンバー管理</h2><div class="section-sub">クラブ全体の名簿。大会ごとの参加者はここから選びます。</div></div>' + addBtn + '</div>';
+    if(!members.length){
+      html += '<div class="empty-state">まだメンバーが登録されていません。「+ メンバーを追加」から登録してください。</div>';
+      return html;
+    }
+    html += '<div class="member-list">';
+    members.forEach(function(m){
+      html += '<div class="member-card">';
+      html += '<div class="num-badge num">' + escapeHtml(m.number||"-") + '</div>';
+      html += '<div class="info">';
+      html += '<div class="name-row"><span class="name">' + escapeHtml(m.name) + '</span>' + (m.nickname ? '<span class="nick">(' + escapeHtml(m.nickname) + ')</span>' : '') + '</div>';
+      var meta = memberMetaLine(m);
+      if(meta) html += '<div class="meta">' + meta + '</div>';
+      html += '</div>';
+      if(ui.confirmDeleteMember === m.id){
+        html += '<div class="confirm-row">削除しますか？' +
+          '<button type="button" class="btn btn-sm btn-danger" data-action="delete-member" data-id="' + m.id + '">削除</button>' +
+          '<button type="button" class="btn btn-sm" data-action="cancel-delete-member">戻る</button></div>';
+      } else {
+        html += '<div class="actions">' +
+          '<button type="button" class="btn btn-ghost" data-action="edit-member" data-id="' + m.id + '" aria-label="編集" title="編集">✎</button>' +
+          (ui.isWriter ? '<button type="button" class="btn btn-ghost" data-action="confirm-delete-member" data-id="' + m.id + '" aria-label="削除" title="削除">✕</button>' : '') +
+          '</div>';
+      }
+      html += '</div>';
+    });
+    html += '</div>';
+    return html;
+  }
+
+  function renderTournamentTab(){
+    var t = currentTournament();
+    var addBtn = '<button type="button" class="btn btn-primary" data-action="add-tournament"' + (ui.isWriter?'':' disabled') + '>+ 大会を追加</button>';
+    var html = '<div class="section-head"><div><h2>大会・参加者</h2><div class="section-sub">大会を選び、出場するメンバーにチェックを付けます。</div></div>' + addBtn + '</div>';
+    html += '<div class="tourn-layout">';
+    html += '<div class="tourn-list-col">';
+    if(!appState.tournaments.length){
+      html += '<div class="empty-state">大会が登録されていません。</div>';
+    } else {
+      appState.tournaments.slice().sort(function(a,b){ return (b.date||"").localeCompare(a.date||""); }).forEach(function(tt){
+        var active = tt.id === ui.currentTournamentId;
+        html += '<div class="tourn-card' + (active?' active':'') + '" data-action="select-tournament" data-id="' + tt.id + '">';
+        html += '<div class="tourn-card-row"><div>';
+        html += '<div class="t-name">' + escapeHtml(tt.name) + '</div>';
+        if(tt.date) html += '<div class="t-date">' + escapeHtml(tt.date) + '</div>';
+        html += '<div class="t-count">参加 ' + tt.participantIds.length + '人</div>';
+        html += '</div>';
+        if(ui.confirmDeleteTournament === tt.id){
+          html += '<div class="confirm-row" style="flex-direction:column;align-items:flex-end;">' +
+            '<button type="button" class="btn btn-sm btn-danger" data-action="delete-tournament" data-id="' + tt.id + '">削除</button>' +
+            '<button type="button" class="btn btn-sm" data-action="cancel-delete-tournament">戻る</button></div>';
+        } else if(ui.isWriter){
+          html += '<div class="actions">' +
+            '<button type="button" class="btn btn-ghost" data-action="edit-tournament" data-id="' + tt.id + '" title="編集">✎</button>' +
+            '<button type="button" class="btn btn-ghost" data-action="confirm-delete-tournament" data-id="' + tt.id + '" title="削除">✕</button></div>';
+        }
+        html += '</div></div>';
+      });
+    }
+    html += '</div>';
+
+    html += '<div class="tourn-detail-col">';
+    if(!t){
+      html += '<div class="empty-state">左の一覧から大会を選択するか、新しく追加してください。</div>';
+    } else {
+      html += '<div><div class="col-label"><span>参加者を選択</span><span>' + t.participantIds.length + '人 選択中</span></div>';
+      if(!appState.members.length){
+        html += '<div class="empty-state">先に「メンバー管理」でメンバーを登録してください。</div>';
+      } else {
+        html += '<div class="chip-grid">';
+        sortedMembers(appState.members).forEach(function(m){
+          var sel = t.participantIds.indexOf(m.id) >= 0;
+          html += '<button type="button" class="pick-chip' + (sel?' selected':'') + '" data-action="toggle-participant" data-id="' + m.id + '"' + (ui.isWriter?'':' disabled') + '>' +
+            '<span class="n num">' + escapeHtml(m.number||"-") + '</span>' + escapeHtml(m.name) + '</button>';
+        });
+        html += '</div>';
+      }
+      html += '</div>';
+
+      html += '<div><div class="col-label"><span>現在の参加者一覧</span></div>';
+      if(!t.participantIds.length){
+        html += '<div class="empty-state">参加者がまだ選択されていません。</div>';
+      } else {
+        var parts = t.participantIds.map(memberById).filter(Boolean);
+        html += '<div class="table-wrap"><table class="roster-table"><thead><tr><th style="width:70px;">背番号</th><th>名前</th></tr></thead><tbody>';
+        sortedMembers(parts).forEach(function(m){
+          html += '<tr><td class="num">' + escapeHtml(m.number||"-") + '</td><td>' + escapeHtml(m.name) + '</td></tr>';
+        });
+        html += '</tbody></table></div>';
+      }
+      html += '</div>';
+    }
+    html += '</div>';
+    html += '</div>';
+    return html;
+  }
+
+  function chipHtml(memberId, locType, idx, extraClass){
+    var m = memberById(memberId);
+    if(!m) return "";
+    var isArmed = ui.armed && ui.armed.memberId === memberId && ui.armed.loc.type === locType && ui.armed.loc.idx === idx;
+    var idxAttr = (idx === undefined || idx === null) ? "" : ' data-loc-idx="' + idx + '"';
+    var label = m.nickname ? m.nickname : m.name;
+    var html = '<div class="chip' + (isArmed?' armed':'') + (extraClass?(' '+extraClass):'') + '" draggable="' + (ui.isWriter?'true':'false') + '"' +
+      ' data-action="chip-tap" data-member-id="' + m.id + '" data-loc-type="' + locType + '"' + idxAttr + ' tabindex="0">';
+    html += '<span class="cn num">' + escapeHtml(m.number||"-") + '</span>';
+    html += '<span class="cname">' + escapeHtml(label) + '</span>';
+    if(locType !== "pool" && ui.isWriter){
+      html += '<button type="button" class="rm" data-action="remove-from-slot" data-loc-type="' + locType + '" data-loc-idx="' + idx + '" data-member-id="' + m.id + '" aria-label="外す" title="外す">×</button>';
+    }
+    html += '</div>';
+    return html;
+  }
+
+  function slotHtml(locType, idx, memberId){
+    var occupied = !!memberId;
+    var dropzoneAttrs = 'data-dropzone data-loc-type="' + locType + '" data-loc-idx="' + idx + '"';
+    var html = '<div class="slot' + (locType==="bench"?' bench':'') + (ui.armed?' armable':'') + '" ' + dropzoneAttrs + '>';
+    html += '<span class="order-num num">' + (idx+1) + '</span>';
+    if(occupied){
+      html += chipHtml(memberId, locType, idx, "");
+    } else {
+      html += '<div class="slot-placeholder" data-action="slot-tap" ' + dropzoneAttrs + '>空き' + (ui.armed ? '（タップして配置）' : '') + '</div>';
+    }
+    html += '</div>';
+    return html;
+  }
+
+  function renderServeTab(){
+    var t = currentTournament();
+    var html = '<div class="section-head"><div><h2>サーブ順</h2><div class="section-sub">背番号・ニックネームでコート内の並び順と控えを管理します（9人制）。</div></div></div>';
+
+    html += '<div class="field" style="max-width:360px;"><label for="serve-tournament-select">大会を選択</label>';
+    html += '<select id="serve-tournament-select" data-action-change="select-tournament-serve">';
+    html += '<option value="">選択してください</option>';
+    appState.tournaments.forEach(function(tt){
+      html += '<option value="' + tt.id + '"' + (tt.id===ui.currentTournamentId?' selected':'') + '>' + escapeHtml(tt.name) + (tt.date?(' ('+escapeHtml(tt.date)+')'):'') + '</option>';
+    });
+    html += '</select></div>';
+
+    if(!t){
+      html += '<div class="empty-state">上のプルダウンで大会を選択してください。参加者は「大会・参加者」タブで設定します。</div>';
+      return html;
+    }
+    if(!t.participantIds.length){
+      html += '<div class="empty-state">この大会にはまだ参加者がいません。先に「大会・参加者」タブで参加者を選択してください。</div>';
+      return html;
+    }
+
+    syncCurrentSetId();
+    var sets = t.sets || [];
+    html += '<div class="set-pills" style="margin-top:16px;">';
+    sets.forEach(function(s, i){
+      html += '<button type="button" class="set-pill' + (s.id===ui.currentSetId?' active':'') + '" data-action="select-set" data-id="' + s.id + '">第' + (i+1) + 'セット</button>';
+    });
+    if(ui.isWriter){
+      html += '<button type="button" class="btn btn-sm" data-action="add-set">+ セットを追加</button>';
+    }
+    html += '</div>';
+
+    var set = currentSet();
+    if(!set){
+      html += '<div class="empty-state" style="margin-top:14px;">「+ セットを追加」でセットを作成してください。</div>';
+      return html;
+    }
+
+    var setIdx = sets.findIndex(function(s){ return s.id === set.id; });
+    if(ui.isWriter){
+      html += '<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">';
+      if(setIdx > 0){
+        var curEmpty = set.order.every(function(x){ return !x; }) && set.bench.every(function(x){ return !x; });
+        if(curEmpty){
+          html += '<button type="button" class="btn btn-sm" data-action="copy-prev-set">前のセットをコピー</button>';
+        }
+      }
+      if(ui.confirmDeleteSet === set.id){
+        html += '<span class="confirm-row">このセットを削除しますか？' +
+          '<button type="button" class="btn btn-sm btn-danger" data-action="delete-set" data-id="' + set.id + '">削除</button>' +
+          '<button type="button" class="btn btn-sm" data-action="cancel-delete-set">戻る</button></span>';
+      } else {
+        html += '<button type="button" class="btn btn-sm btn-ghost" data-action="confirm-delete-set" data-id="' + set.id + '">このセットを削除</button>';
+      }
+      html += '</div>';
+    }
+
+    var assigned = {};
+    set.order.forEach(function(id){ if(id) assigned[id] = true; });
+    set.bench.forEach(function(id){ if(id) assigned[id] = true; });
+    var pool = t.participantIds.filter(function(id){ return !assigned[id]; }).map(memberById).filter(Boolean);
+    pool = sortedMembers(pool);
+
+    html += '<div class="serve-layout">';
+    html += '<div class="court-col"><div class="col-label"><span>コート（1〜9番手）</span></div><div class="slot-list">';
+    for(var i=0;i<9;i++){
+      html += slotHtml("order", i, set.order[i]);
+    }
+    html += '</div></div>';
+
+    html += '<div class="bench-col"><div class="col-label"><span>控え（6枠）</span></div><div class="slot-list">';
+    for(var j=0;j<6;j++){
+      html += slotHtml("bench", j, set.bench[j]);
+    }
+    html += '</div></div>';
+    html += '</div>';
+
+    html += '<div class="col-label" style="margin-top:18px;"><span>参加メンバー（未配置）</span><span>' + pool.length + '人</span></div>';
+    html += '<div class="pool-zone" data-dropzone data-loc-type="pool" data-action="slot-tap" data-loc-type="pool">';
+    if(!pool.length){
+      html += '<span class="hint">全員配置されています</span>';
+    } else {
+      pool.forEach(function(m){ html += chipHtml(m.id, "pool", undefined, ""); });
+    }
+    html += '</div>';
+    html += '<p class="hint">チップをドラッグして配置、またはタップして選択してから配置先をタップします。' + (ui.isWriter?'':' (読み取り専用のため編集できません)') + '</p>';
+
+    return html;
+  }
+
+  /* ---------------- modals ---------------- */
+
+  function closeModal(){
+    ui.memberModal = null;
+    ui.tournamentModal = null;
+    ui.pendingImport = null;
+    renderModalRoot();
+  }
+  function renderModalRoot(){
+    var root = document.getElementById("modal-root");
+    if(ui.memberModal) root.innerHTML = renderMemberModal(ui.memberModal.id);
+    else if(ui.tournamentModal) root.innerHTML = renderTournamentModal(ui.tournamentModal.id);
+    else if(ui.pendingImport) root.innerHTML = renderImportModal();
+    else root.innerHTML = "";
+  }
+  function openMemberModal(id){ ui.memberModal = { id: id }; renderModalRoot(); }
+  function openTournamentModal(id){ ui.tournamentModal = { id: id }; renderModalRoot(); }
+
+  function renderMemberModal(id){
+    var m = id ? memberById(id) : null;
+    var title = m ? "メンバーを編集" : "メンバーを追加";
+    var genderOpts = GENDERS.map(function(g){
+      return '<option value="' + g + '"' + (m && m.gender===g ? ' selected' : '') + '>' + g + '</option>';
+    }).join("");
+    var html = '<div class="modal-overlay" data-action="close-modal-overlay">';
+    html += '<div class="modal-card" role="dialog" aria-modal="true" aria-label="' + title + '">';
+    html += '<h3>' + title + '</h3>';
+    html += '<div class="form-error" id="form-error"></div>';
+    html += '<div class="field-row">';
+    html += '<div class="field"><label for="f-number">背番号 *</label><input id="f-number" value="' + escapeHtml(m?m.number:"") + '"></div>';
+    html += '<div class="field"><label for="f-name">名前 *</label><input id="f-name" value="' + escapeHtml(m?m.name:"") + '"></div>';
+    html += '</div>';
+    html += '<div class="field"><label for="f-nickname">ニックネーム</label><input id="f-nickname" value="' + escapeHtml(m?m.nickname:"") + '"></div>';
+    html += '<div class="field-row">';
+    html += '<div class="field"><label for="f-birthdate">生年月日</label><input type="date" id="f-birthdate" value="' + escapeHtml(m?m.birthdate:"") + '"></div>';
+    html += '<div class="field"><label for="f-gender">性別</label><select id="f-gender"><option value="">未選択</option>' + genderOpts + '</select></div>';
+    html += '</div>';
+    html += '<div class="field"><label for="f-region">住んでる地域</label><input id="f-region" value="' + escapeHtml(m?m.region:"") + '"></div>';
+    html += '<div class="field"><label for="f-school">出身校</label><input id="f-school" value="' + escapeHtml(m?m.school:"") + '"></div>';
+    html += '<div class="modal-actions">';
+    html += '<button type="button" class="btn" data-action="close-modal">キャンセル</button>';
+    html += '<button type="button" class="btn btn-primary" data-action="save-member" data-id="' + (id||"") + '">保存</button>';
+    html += '</div></div></div>';
+    return html;
+  }
+
+  function renderTournamentModal(id){
+    var t = id ? currentTournamentByIdAll(id) : null;
+    var title = t ? "大会を編集" : "大会を追加";
+    var html = '<div class="modal-overlay" data-action="close-modal-overlay">';
+    html += '<div class="modal-card" role="dialog" aria-modal="true" aria-label="' + title + '">';
+    html += '<h3>' + title + '</h3>';
+    html += '<div class="form-error" id="form-error"></div>';
+    html += '<div class="field"><label for="tf-name">大会名 *</label><input id="tf-name" value="' + escapeHtml(t?t.name:"") + '"></div>';
+    html += '<div class="field"><label for="tf-date">開催日</label><input type="date" id="tf-date" value="' + escapeHtml(t?t.date:"") + '"></div>';
+    html += '<div class="modal-actions">';
+    html += '<button type="button" class="btn" data-action="close-modal">キャンセル</button>';
+    html += '<button type="button" class="btn btn-primary" data-action="save-tournament" data-id="' + (id||"") + '">保存</button>';
+    html += '</div></div></div>';
+    return html;
+  }
+
+  function renderImportModal(){
+    var data = ui.pendingImport || {};
+    var memberCount = Array.isArray(data.members) ? data.members.length : 0;
+    var tournamentCount = Array.isArray(data.tournaments) ? data.tournaments.length : 0;
+    var html = '<div class="modal-overlay" data-action="close-modal-overlay">';
+    html += '<div class="modal-card" role="dialog" aria-modal="true" aria-label="データの読み込み">';
+    html += '<h3>データを読み込みますか？</h3>';
+    html += '<p class="import-summary">読み込むファイルには <b>メンバー ' + memberCount + '人</b>、<b>大会 ' + tournamentCount + '件</b> のデータが含まれています。<br>この端末に保存されている現在のデータは上書きされます。</p>';
+    html += '<div class="modal-actions">';
+    html += '<button type="button" class="btn" data-action="cancel-import">キャンセル</button>';
+    html += '<button type="button" class="btn btn-primary" data-action="confirm-import">読み込む</button>';
+    html += '</div></div></div>';
+    return html;
+  }
+
+  /* ---------------- event wiring ---------------- */
+
+  function handleAction(action, el){
+    switch(action){
+      case "switch-tab":
+        ui.activeTab = el.getAttribute("data-tab");
+        renderApp();
+        break;
+      case "add-member":
+        if(!requireWriter()) break;
+        openMemberModal(null);
+        break;
+      case "edit-member":
+        openMemberModal(el.getAttribute("data-id"));
+        break;
+      case "confirm-delete-member":
+        if(!requireWriter()) break;
+        ui.confirmDeleteMember = el.getAttribute("data-id");
+        renderApp();
+        break;
+      case "cancel-delete-member":
+        ui.confirmDeleteMember = null;
+        renderApp();
+        break;
+      case "delete-member":
+        if(!requireWriter()) break;
+        deleteMember(el.getAttribute("data-id"));
+        break;
+      case "close-modal":
+      case "close-modal-overlay":
+        closeModal();
+        break;
+      case "save-member":
+        if(!requireWriter()) break;
+        saveMemberFromForm(el.getAttribute("data-id") || null);
+        break;
+      case "add-tournament":
+        if(!requireWriter()) break;
+        openTournamentModal(null);
+        break;
+      case "edit-tournament":
+        openTournamentModal(el.getAttribute("data-id"));
+        break;
+      case "save-tournament":
+        if(!requireWriter()) break;
+        saveTournamentFromForm(el.getAttribute("data-id") || null);
+        break;
+      case "confirm-delete-tournament":
+        if(!requireWriter()) break;
+        ui.confirmDeleteTournament = el.getAttribute("data-id");
+        renderApp();
+        break;
+      case "cancel-delete-tournament":
+        ui.confirmDeleteTournament = null;
+        renderApp();
+        break;
+      case "delete-tournament":
+        if(!requireWriter()) break;
+        deleteTournament(el.getAttribute("data-id"));
+        break;
+      case "select-tournament":
+        ui.currentTournamentId = el.getAttribute("data-id");
+        syncCurrentSetId();
+        renderApp();
+        break;
+      case "toggle-participant":
+        if(!requireWriter()) break;
+        toggleParticipant(el.getAttribute("data-id"));
+        break;
+      case "add-set":
+        if(!requireWriter()) break;
+        addSet();
+        break;
+      case "select-set":
+        ui.currentSetId = el.getAttribute("data-id");
+        ui.armed = null;
+        renderApp();
+        break;
+      case "confirm-delete-set":
+        if(!requireWriter()) break;
+        ui.confirmDeleteSet = el.getAttribute("data-id");
+        renderApp();
+        break;
+      case "cancel-delete-set":
+        ui.confirmDeleteSet = null;
+        renderApp();
+        break;
+      case "delete-set":
+        if(!requireWriter()) break;
+        deleteSet(el.getAttribute("data-id"));
+        break;
+      case "copy-prev-set":
+        if(!requireWriter()) break;
+        copyPrevSet();
+        break;
+      case "chip-tap":
+        if(!requireWriter()) break;
+        onChipTap(el);
+        break;
+      case "slot-tap":
+        if(!requireWriter()) break;
+        onSlotTap(el);
+        break;
+      case "remove-from-slot":
+        if(!requireWriter()) break;
+        onRemoveFromSlot(el);
+        break;
+      case "export-data":
+        exportData();
+        break;
+      case "trigger-import":
+        triggerImport();
+        break;
+      case "confirm-import":
+        confirmImport();
+        break;
+      case "cancel-import":
+        cancelImport();
+        break;
+    }
+  }
+
+  document.addEventListener("click", function(e){
+    var el = e.target.closest("[data-action]");
+    if(!el) return;
+    handleAction(el.getAttribute("data-action"), el);
+  });
+
+  document.addEventListener("change", function(e){
+    if(e.target && e.target.id === "serve-tournament-select"){
+      ui.currentTournamentId = e.target.value || null;
+      syncCurrentSetId();
+      renderApp();
+    }
+    if(e.target && e.target.id === "import-file"){
+      var file = e.target.files && e.target.files[0];
+      e.target.value = "";
+      if(file) handleImportFile(file);
+    }
+  });
+
+  document.addEventListener("dragstart", function(e){
+    var chip = e.target.closest ? e.target.closest(".chip[draggable='true']") : null;
+    if(!chip) return;
+    dragData = {
+      memberId: chip.getAttribute("data-member-id"),
+      loc: { type: chip.getAttribute("data-loc-type"), idx: chip.hasAttribute("data-loc-idx") ? +chip.getAttribute("data-loc-idx") : undefined }
+    };
+    if(e.dataTransfer){
+      e.dataTransfer.effectAllowed = "move";
+      try{ e.dataTransfer.setData("text/plain", dragData.memberId); }catch(err){}
+    }
+    chip.classList.add("dragging");
+  });
+  document.addEventListener("dragend", function(e){
+    var chip = e.target.closest ? e.target.closest(".chip") : null;
+    if(chip) chip.classList.remove("dragging");
+    dragData = null;
+  });
+  document.addEventListener("dragover", function(e){
+    var zone = e.target.closest ? e.target.closest("[data-dropzone]") : null;
+    if(!zone || !dragData) return;
+    e.preventDefault();
+    zone.classList.add("drag-over");
+  });
+  document.addEventListener("dragleave", function(e){
+    var zone = e.target.closest ? e.target.closest("[data-dropzone]") : null;
+    if(zone) zone.classList.remove("drag-over");
+  });
+  document.addEventListener("drop", function(e){
+    var zone = e.target.closest ? e.target.closest("[data-dropzone]") : null;
+    if(!zone || !dragData){ return; }
+    e.preventDefault();
+    zone.classList.remove("drag-over");
+    if(!requireWriter()){ dragData = null; return; }
+    var targetLoc = { type: zone.getAttribute("data-loc-type"), idx: zone.hasAttribute("data-loc-idx") ? +zone.getAttribute("data-loc-idx") : undefined };
+    moveMember(dragData.memberId, dragData.loc, targetLoc);
+    dragData = null;
+    ui.armed = null;
+    renderApp();
+    scheduleSave();
+  });
+
+  /* ---------------- boot ---------------- */
+
+  async function boot(){
+    appState = await loadInitialState();
+    renderApp();
+    ui.saveStatus = "saved";
+    updateStatusBar();
+  }
+
+  boot();
+})();
+</script>
+</body>
+</html>
