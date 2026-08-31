@@ -25,6 +25,10 @@
     --danger:#C43B3B;
     --danger-soft:#F6DEDE;
     --focus:#3E7CB8;
+    --gender-male:#2E6DA4;
+    --gender-male-ink:#FFFFFF;
+    --gender-female:#C94A80;
+    --gender-female-ink:#FFFFFF;
     --shadow: 0 1px 2px rgba(20,30,45,.06), 0 8px 24px rgba(20,30,45,.08);
   }
   @media (prefers-color-scheme: dark){
@@ -45,6 +49,10 @@
       --danger:#E2695F;
       --danger-soft:#3A1E1C;
       --focus:#6AA9E0;
+      --gender-male:#5B9BD9;
+      --gender-male-ink:#0B1E2E;
+      --gender-female:#FF9AC1;
+      --gender-female-ink:#3A0A1C;
       --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.35);
     }
   }
@@ -65,6 +73,10 @@
     --danger:#E2695F;
     --danger-soft:#3A1E1C;
     --focus:#6AA9E0;
+    --gender-male:#5B9BD9;
+    --gender-male-ink:#0B1E2E;
+    --gender-female:#FF9AC1;
+    --gender-female-ink:#3A0A1C;
     --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.35);
   }
 
@@ -274,6 +286,45 @@
   .badge-readonly{ background:var(--danger-soft); color:var(--danger); border-radius:999px; padding:2px 10px; font-size:11.5px; font-weight:700; }
   .visually-hidden{ position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0,0,0,0); }
 
+  /* ---- Serve tab: pool add-chips, mode badge, drag & drop ---- */
+  .pool-chip{
+    display:flex; align-items:center; gap:7px; border:1.5px solid var(--border); background:var(--surface);
+    border-radius:999px; padding:6px 12px 6px 8px; cursor:pointer; font-size:13px; font-weight:600;
+  }
+  .pool-chip:hover{ border-color:var(--accent); }
+  .pool-chip .n{ background:var(--surface-2); border-radius:999px; min-width:22px; height:22px; padding:0 4px; display:flex; align-items:center; justify-content:center; font-size:11.5px; font-weight:800; }
+  .pool-chip:disabled{ opacity:.4; cursor:not-allowed; }
+
+  .mode-badge{ font-size:11px; font-weight:700; border-radius:999px; padding:3px 10px; }
+  .mode-badge.court-mode{ background:var(--accent-soft); color:var(--accent); }
+  .mode-badge.bench-mode{ background:var(--good-soft); color:var(--good); }
+  .mode-badge.full{ background:var(--danger-soft); color:var(--danger); }
+
+  .bench-tag{
+    flex:none; background:var(--good-soft); color:var(--good); font-size:10px; font-weight:800;
+    border-radius:5px; padding:1px 5px; letter-spacing:.02em;
+  }
+
+  .chip[data-slot-chip]{ touch-action:none; -webkit-user-select:none; user-select:none; -webkit-touch-callout:none; }
+  .drag-ghost{
+    position:fixed; top:0; left:0; z-index:999; pointer-events:none; opacity:.95;
+    box-shadow:0 10px 28px rgba(20,30,45,.28); transform:translate(-50%,-50%) rotate(-2deg);
+  }
+  body.dnd-active{ cursor:grabbing; user-select:none; }
+  body.dnd-active *{ cursor:grabbing !important; }
+
+  /* ---- gender-colored jersey-number badges (kept distinct from position/order badges) ---- */
+  .num-badge[data-gender="male"], .cn[data-gender="male"], .pool-chip .n[data-gender="male"], .pick-chip .n[data-gender="male"]{
+    background:var(--gender-male); color:var(--gender-male-ink);
+  }
+  .num-badge[data-gender="female"], .cn[data-gender="female"], .pool-chip .n[data-gender="female"], .pick-chip .n[data-gender="female"]{
+    background:var(--gender-female); color:var(--gender-female-ink);
+  }
+  .pick-chip.selected .n[data-gender="male"],.pick-chip.selected .n[data-gender="female"]{
+    background:var(--gender-male); color:var(--gender-male-ink);
+  }
+  .pick-chip.selected .n[data-gender="female"]{ background:var(--gender-female); color:var(--gender-female-ink); }
+
   .header-actions{ display:flex; gap:8px; margin-top:12px; flex-wrap:wrap; }
   .btn-header{
     background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.28); color:var(--structure-ink);
@@ -341,7 +392,6 @@
     pendingImport: null
   };
   var saveTimer = null;
-  var dragData = null;
 
   function uid(prefix){
     return prefix + Math.random().toString(36).slice(2,9) + Date.now().toString(36).slice(-4);
@@ -352,6 +402,15 @@
     });
   }
   function defaultState(){ return { members: [], tournaments: [] }; }
+  function genderBucket(gender){
+    if(gender === "男性") return "male";
+    if(gender === "女性") return "female";
+    return "";
+  }
+  function genderAttr(gender){
+    var g = genderBucket(gender);
+    return g ? (' data-gender="' + g + '"') : "";
+  }
 
   /* ---------------- persistence ---------------- */
 
@@ -390,10 +449,11 @@
     }
     return s;
   }
-  function normalizeSlots(arr, len){
-    var out = Array(len).fill(null);
-    if(Array.isArray(arr)){ for(var i=0;i<len;i++){ out[i] = arr[i] || null; } }
-    return out;
+  function normalizeSlots(arr, cap){
+    if(!Array.isArray(arr)) return [];
+    var compact = arr.filter(function(x){ return !!x; });
+    if(compact.length > cap) compact = compact.slice(0, cap);
+    return compact;
   }
 
   function exportData(){
@@ -517,11 +577,12 @@
     appState.tournaments.forEach(function(t){
       t.participantIds = t.participantIds.filter(function(pid){ return pid !== id; });
       (t.sets||[]).forEach(function(s){
-        s.order = s.order.map(function(x){ return x === id ? null : x; });
-        s.bench = s.bench.map(function(x){ return x === id ? null : x; });
+        s.order = s.order.filter(function(x){ return x !== id; });
+        s.bench = s.bench.filter(function(x){ return x !== id; });
       });
     });
     ui.confirmDeleteMember = null;
+    ui.armed = null;
     renderApp();
     scheduleSave();
   }
@@ -595,9 +656,10 @@
     if(idx >= 0){
       t.participantIds.splice(idx,1);
       (t.sets||[]).forEach(function(s){
-        s.order = s.order.map(function(x){ return x === memberId ? null : x; });
-        s.bench = s.bench.map(function(x){ return x === memberId ? null : x; });
+        s.order = s.order.filter(function(x){ return x !== memberId; });
+        s.bench = s.bench.filter(function(x){ return x !== memberId; });
       });
+      ui.armed = null;
     } else {
       t.participantIds.push(memberId);
     }
@@ -609,7 +671,7 @@
     var t = currentTournament();
     if(!t) return;
     if(!t.sets) t.sets = [];
-    var s = { id: uid("set_"), order: Array(9).fill(null), bench: Array(6).fill(null) };
+    var s = { id: uid("set_"), order: [], bench: [] };
     t.sets.push(s);
     ui.currentSetId = s.id;
     renderApp();
@@ -639,58 +701,108 @@
     scheduleSave();
   }
 
-  function sameLoc(a,b){
-    return a && b && a.type === b.type && a.idx === b.idx;
+  /* ---- serve-order model ----
+   * set.order / set.bench are COMPACT arrays (no gaps): index 0..length-1 are
+   * the filled positions (1番手.. / 控え1..), and index length..capacity-1 are
+   * shown as empty placeholders. Reordering within a list = remove+insert
+   * (like reordering a playlist); moving between the two lists = swap the
+   * two occupants directly (or a plain move when the target side is an
+   * empty placeholder). */
+  function getArr(listType){
+    var set = currentSet();
+    if(!set) return null;
+    return listType === "order" ? set.order : set.bench;
   }
-  function moveMember(memberId, fromLoc, toLoc){
+  function capacityOf(listType){ return listType === "order" ? 9 : 6; }
+
+  function addFromPool(memberId){
+    if(!requireWriter()) return;
     var set = currentSet();
     if(!set) return;
-    if(fromLoc.type === "pool" && toLoc.type === "pool") return;
-    function arrOf(loc){
-      if(loc.type === "order") return set.order;
-      if(loc.type === "bench") return set.bench;
-      return null;
-    }
-    var fromArr = arrOf(fromLoc), toArr = arrOf(toLoc);
-    var targetOccupant = toArr ? toArr[toLoc.idx] : null;
-    if(fromArr) fromArr[fromLoc.idx] = null;
-    if(toArr){
-      if(targetOccupant && targetOccupant !== memberId){
-        if(fromArr){ fromArr[fromLoc.idx] = targetOccupant; }
-      }
-      toArr[toLoc.idx] = memberId;
-    }
-  }
-
-  function onChipTap(el){
-    var memberId = el.getAttribute("data-member-id");
-    var loc = { type: el.getAttribute("data-loc-type"), idx: el.hasAttribute("data-loc-idx") ? +el.getAttribute("data-loc-idx") : undefined };
-    if(ui.armed){
-      if(ui.armed.memberId === memberId && sameLoc(ui.armed.loc, loc)){
-        ui.armed = null;
-      } else {
-        moveMember(memberId, loc, ui.armed.loc);
-        ui.armed = null;
-        scheduleSave();
-      }
-    } else {
-      ui.armed = { memberId: memberId, loc: loc };
-    }
-    renderApp();
-  }
-  function onSlotTap(el){
-    if(!ui.armed) return;
-    var loc = { type: el.getAttribute("data-loc-type"), idx: el.hasAttribute("data-loc-idx") ? +el.getAttribute("data-loc-idx") : undefined };
-    moveMember(ui.armed.memberId, ui.armed.loc, loc);
+    if(set.order.length < 9){ set.order.push(memberId); }
+    else if(set.bench.length < 6){ set.bench.push(memberId); }
+    else { return; }
     ui.armed = null;
     renderApp();
     scheduleSave();
   }
-  function onRemoveFromSlot(el){
-    var loc = { type: el.getAttribute("data-loc-type"), idx: +el.getAttribute("data-loc-idx") };
-    var memberId = el.getAttribute("data-member-id");
-    moveMember(memberId, loc, { type: "pool" });
-    if(ui.armed && ui.armed.memberId === memberId) ui.armed = null;
+
+  function handleRemoveFromSlot(el){
+    if(!requireWriter()) return;
+    var listType = el.getAttribute("data-list-type");
+    var index = +el.getAttribute("data-index");
+    var arr = getArr(listType);
+    if(!arr) return;
+    arr.splice(index, 1);
+    ui.armed = null;
+    renderApp();
+    scheduleSave();
+  }
+
+  function performTransfer(source, target){
+    if(!source || !target) return;
+    if(source.listType === target.listType && source.index === target.index && !target.isPlaceholder) return;
+    var srcArr = getArr(source.listType);
+    if(!srcArr) return;
+    var srcId = srcArr[source.index];
+    if(srcId === undefined) return;
+
+    if(source.listType === target.listType){
+      srcArr.splice(source.index, 1);
+      // target.index is the FINAL index the dragged item should land at
+      // (the standard "arrayMove" convention) -- no direction-based
+      // adjustment needed, since splice() already accounts for the
+      // shrink caused by removing the source item above.
+      var insertIdx = target.isPlaceholder ? srcArr.length : target.index;
+      if(insertIdx > srcArr.length) insertIdx = srcArr.length;
+      if(insertIdx < 0) insertIdx = 0;
+      srcArr.splice(insertIdx, 0, srcId);
+      return;
+    }
+
+    var tgtArr = getArr(target.listType);
+    if(!tgtArr) return;
+    if(target.isPlaceholder){
+      if(tgtArr.length >= capacityOf(target.listType)) return;
+      srcArr.splice(source.index, 1);
+      tgtArr.push(srcId);
+      return;
+    }
+    var tgtId = tgtArr[target.index];
+    if(tgtId === undefined){
+      srcArr.splice(source.index, 1);
+      tgtArr.push(srcId);
+    } else {
+      srcArr[source.index] = tgtId;
+      tgtArr[target.index] = srcId;
+    }
+  }
+
+  function handleSlotClick(slotEl){
+    if(!requireWriter()) return;
+    var listType = slotEl.getAttribute("data-list-type");
+    var index = +slotEl.getAttribute("data-index");
+    var isPlaceholder = slotEl.getAttribute("data-placeholder") === "true";
+    if(isPlaceholder){
+      if(!ui.armed) return;
+      performTransfer(ui.armed, { listType: listType, index: index, isPlaceholder: true });
+      ui.armed = null;
+      renderApp();
+      scheduleSave();
+      return;
+    }
+    if(!ui.armed){
+      ui.armed = { listType: listType, index: index };
+      renderApp();
+      return;
+    }
+    if(ui.armed.listType === listType && ui.armed.index === index){
+      ui.armed = null;
+      renderApp();
+      return;
+    }
+    performTransfer(ui.armed, { listType: listType, index: index, isPlaceholder: false });
+    ui.armed = null;
     renderApp();
     scheduleSave();
   }
@@ -727,7 +839,7 @@
     html += '<div class="member-list">';
     members.forEach(function(m){
       html += '<div class="member-card">';
-      html += '<div class="num-badge num">' + escapeHtml(m.number||"-") + '</div>';
+      html += '<div class="num-badge num"' + genderAttr(m.gender) + '>' + escapeHtml(m.number||"-") + '</div>';
       html += '<div class="info">';
       html += '<div class="name-row"><span class="name">' + escapeHtml(m.name) + '</span>' + (m.nickname ? '<span class="nick">(' + escapeHtml(m.nickname) + ')</span>' : '') + '</div>';
       var meta = memberMetaLine(m);
@@ -792,7 +904,7 @@
         sortedMembers(appState.members).forEach(function(m){
           var sel = t.participantIds.indexOf(m.id) >= 0;
           html += '<button type="button" class="pick-chip' + (sel?' selected':'') + '" data-action="toggle-participant" data-id="' + m.id + '"' + (ui.isWriter?'':' disabled') + '>' +
-            '<span class="n num">' + escapeHtml(m.number||"-") + '</span>' + escapeHtml(m.name) + '</button>';
+            '<span class="n num"' + genderAttr(m.gender) + '>' + escapeHtml(m.number||"-") + '</span>' + escapeHtml(m.name) + '</button>';
         });
         html += '</div>';
       }
@@ -816,32 +928,34 @@
     return html;
   }
 
-  function chipHtml(memberId, locType, idx, extraClass){
+  function chipHtml(listType, index, memberId){
     var m = memberById(memberId);
     if(!m) return "";
-    var isArmed = ui.armed && ui.armed.memberId === memberId && ui.armed.loc.type === locType && ui.armed.loc.idx === idx;
-    var idxAttr = (idx === undefined || idx === null) ? "" : ' data-loc-idx="' + idx + '"';
+    var isArmed = ui.armed && ui.armed.listType === listType && ui.armed.index === index;
     var label = m.nickname ? m.nickname : m.name;
-    var html = '<div class="chip' + (isArmed?' armed':'') + (extraClass?(' '+extraClass):'') + '" draggable="' + (ui.isWriter?'true':'false') + '"' +
-      ' data-action="chip-tap" data-member-id="' + m.id + '" data-loc-type="' + locType + '"' + idxAttr + ' tabindex="0">';
-    html += '<span class="cn num">' + escapeHtml(m.number||"-") + '</span>';
+    var benchTag = listType === "bench" ? '<span class="bench-tag">控え</span>' : '';
+    var html = '<div class="chip' + (isArmed?' armed':'') + '"' +
+      (ui.isWriter ? ' data-slot-chip' : '') +
+      ' data-list-type="' + listType + '" data-index="' + index + '" data-member-id="' + m.id + '" tabindex="0">';
+    html += '<span class="cn num"' + genderAttr(m.gender) + '>' + escapeHtml(m.number||"-") + '</span>';
+    html += benchTag;
     html += '<span class="cname">' + escapeHtml(label) + '</span>';
-    if(locType !== "pool" && ui.isWriter){
-      html += '<button type="button" class="rm" data-action="remove-from-slot" data-loc-type="' + locType + '" data-loc-idx="' + idx + '" data-member-id="' + m.id + '" aria-label="外す" title="外す">×</button>';
+    if(ui.isWriter){
+      html += '<button type="button" class="rm" data-action="remove-from-slot" data-list-type="' + listType + '" data-index="' + index + '" aria-label="外す" title="外す">×</button>';
     }
     html += '</div>';
     return html;
   }
 
-  function slotHtml(locType, idx, memberId){
+  function slotHtml(listType, index, memberId){
     var occupied = !!memberId;
-    var dropzoneAttrs = 'data-dropzone data-loc-type="' + locType + '" data-loc-idx="' + idx + '"';
-    var html = '<div class="slot' + (locType==="bench"?' bench':'') + (ui.armed?' armable':'') + '" ' + dropzoneAttrs + '>';
-    html += '<span class="order-num num">' + (idx+1) + '</span>';
+    var attrs = 'data-slot data-list-type="' + listType + '" data-index="' + index + '" data-placeholder="' + (!occupied) + '"';
+    var html = '<div class="slot' + (listType==="bench"?' bench':'') + (ui.armed?' armable':'') + '" ' + attrs + '>';
+    html += '<span class="order-num num">' + (index+1) + '</span>';
     if(occupied){
-      html += chipHtml(memberId, locType, idx, "");
+      html += chipHtml(listType, index, memberId);
     } else {
-      html += '<div class="slot-placeholder" data-action="slot-tap" ' + dropzoneAttrs + '>空き' + (ui.armed ? '（タップして配置）' : '') + '</div>';
+      html += '<div class="slot-placeholder">空き' + (ui.armed ? '（タップして配置）' : '') + '</div>';
     }
     html += '</div>';
     return html;
@@ -889,7 +1003,7 @@
     if(ui.isWriter){
       html += '<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">';
       if(setIdx > 0){
-        var curEmpty = set.order.every(function(x){ return !x; }) && set.bench.every(function(x){ return !x; });
+        var curEmpty = set.order.length === 0 && set.bench.length === 0;
         if(curEmpty){
           html += '<button type="button" class="btn btn-sm" data-action="copy-prev-set">前のセットをコピー</button>';
         }
@@ -905,34 +1019,49 @@
     }
 
     var assigned = {};
-    set.order.forEach(function(id){ if(id) assigned[id] = true; });
-    set.bench.forEach(function(id){ if(id) assigned[id] = true; });
+    set.order.forEach(function(id){ assigned[id] = true; });
+    set.bench.forEach(function(id){ assigned[id] = true; });
     var pool = t.participantIds.filter(function(id){ return !assigned[id]; }).map(memberById).filter(Boolean);
     pool = sortedMembers(pool);
 
     html += '<div class="serve-layout">';
     html += '<div class="court-col"><div class="col-label"><span>コート（1〜9番手）</span></div><div class="slot-list">';
     for(var i=0;i<9;i++){
-      html += slotHtml("order", i, set.order[i]);
+      html += slotHtml("order", i, set.order[i] || null);
     }
     html += '</div></div>';
 
     html += '<div class="bench-col"><div class="col-label"><span>控え（6枠）</span></div><div class="slot-list">';
     for(var j=0;j<6;j++){
-      html += slotHtml("bench", j, set.bench[j]);
+      html += slotHtml("bench", j, set.bench[j] || null);
     }
     html += '</div></div>';
     html += '</div>';
 
-    html += '<div class="col-label" style="margin-top:18px;"><span>参加メンバー（未配置）</span><span>' + pool.length + '人</span></div>';
-    html += '<div class="pool-zone" data-dropzone data-loc-type="pool" data-action="slot-tap" data-loc-type="pool">';
+    var orderFull = set.order.length >= 9;
+    var benchFull = set.bench.length >= 6;
+    var modeBadge;
+    if(orderFull && benchFull){
+      modeBadge = '<span class="mode-badge full">満員（コート・控えとも定員です）</span>';
+    } else if(orderFull){
+      modeBadge = '<span class="mode-badge bench-mode">次はタップで控えに追加されます</span>';
+    } else {
+      modeBadge = '<span class="mode-badge court-mode">次はタップでコート ' + (set.order.length+1) + '番手に追加されます</span>';
+    }
+
+    html += '<div class="col-label" style="margin-top:18px;"><span>参加メンバー（未配置）' + (pool.length?(' ・ '+pool.length+'人'):'') + '</span>' + modeBadge + '</div>';
+    html += '<div class="pool-zone">';
     if(!pool.length){
       html += '<span class="hint">全員配置されています</span>';
     } else {
-      pool.forEach(function(m){ html += chipHtml(m.id, "pool", undefined, ""); });
+      pool.forEach(function(m){
+        var disabled = !ui.isWriter || (orderFull && benchFull);
+        html += '<button type="button" class="pool-chip" data-action="add-from-pool" data-id="' + m.id + '"' + (disabled?' disabled':'') + '>' +
+          '<span class="n num"' + genderAttr(m.gender) + '>' + escapeHtml(m.number||"-") + '</span>' + escapeHtml(m.name) + '</button>';
+      });
     }
     html += '</div>';
-    html += '<p class="hint">チップをドラッグして配置、またはタップして選択してから配置先をタップします。' + (ui.isWriter?'':' (読み取り専用のため編集できません)') + '</p>';
+    html += '<p class="hint">参加メンバーをタップすると、コート→控えの順に自動で追加されます。並び替えはチップをドラッグ、またはタップして選択してから移動先をタップします。' + (ui.isWriter?'':' (読み取り専用のため編集できません)') + '</p>';
 
     return html;
   }
@@ -1109,17 +1238,11 @@
         if(!requireWriter()) break;
         copyPrevSet();
         break;
-      case "chip-tap":
-        if(!requireWriter()) break;
-        onChipTap(el);
-        break;
-      case "slot-tap":
-        if(!requireWriter()) break;
-        onSlotTap(el);
+      case "add-from-pool":
+        addFromPool(el.getAttribute("data-id"));
         break;
       case "remove-from-slot":
-        if(!requireWriter()) break;
-        onRemoveFromSlot(el);
+        handleRemoveFromSlot(el);
         break;
       case "export-data":
         exportData();
@@ -1136,15 +1259,25 @@
     }
   }
 
+  var suppressNextClick = false;
+  var dragState = null;
+
   document.addEventListener("click", function(e){
+    if(suppressNextClick){ suppressNextClick = false; return; }
     var el = e.target.closest("[data-action]");
-    if(!el) return;
-    var action = el.getAttribute("data-action");
-    // The overlay's "close on backdrop click" must only fire when the
-    // backdrop itself was clicked, not when a click inside the modal
-    // card (an input, a label, ...) bubbles up to it.
-    if(action === "close-modal-overlay" && e.target !== el) return;
-    handleAction(action, el);
+    if(el){
+      var action = el.getAttribute("data-action");
+      // The overlay's "close on backdrop click" must only fire when the
+      // backdrop itself was clicked, not when a click inside the modal
+      // card (an input, a label, ...) bubbles up to it.
+      if(action === "close-modal-overlay" && e.target !== el) return;
+      handleAction(action, el);
+      return;
+    }
+    // Tap-to-arm / tap-to-place fallback for the serve-order court & bench
+    // slots (mirrors what dragging does, for touch-less / accessible use).
+    var slotEl = e.target.closest("[data-slot]");
+    if(slotEl) handleSlotClick(slotEl);
   });
 
   document.addEventListener("change", function(e){
@@ -1160,46 +1293,101 @@
     }
   });
 
-  document.addEventListener("dragstart", function(e){
-    var chip = e.target.closest ? e.target.closest(".chip[draggable='true']") : null;
+  /* ---- pointer-based drag & drop for the serve-order slots ----
+   * Works uniformly for mouse and touch. A move within the SAME list
+   * reorders (remove + insert, like a playlist); a move to the OTHER
+   * list swaps with whatever occupies the drop target (or just moves,
+   * if the target is an empty placeholder). A plain tap (no movement
+   * past the threshold) falls through to handleSlotClick via the click
+   * listener above, EXCEPT a click that immediately follows a real drag,
+   * which is suppressed so the drop isn't also treated as a tap. */
+  document.addEventListener("pointerdown", function(e){
+    if(!ui.isWriter) return;
+    if(e.pointerType === "mouse" && e.button !== 0) return;
+    if(e.target.closest('[data-action="remove-from-slot"]')) return;
+    var chip = e.target.closest(".chip[data-slot-chip]");
     if(!chip) return;
-    dragData = {
-      memberId: chip.getAttribute("data-member-id"),
-      loc: { type: chip.getAttribute("data-loc-type"), idx: chip.hasAttribute("data-loc-idx") ? +chip.getAttribute("data-loc-idx") : undefined }
+    dragState = {
+      pointerId: e.pointerId,
+      chipEl: chip,
+      listType: chip.getAttribute("data-list-type"),
+      index: +chip.getAttribute("data-index"),
+      startX: e.clientX,
+      startY: e.clientY,
+      dragging: false,
+      ghost: null,
+      hoverEl: null
     };
-    if(e.dataTransfer){
-      e.dataTransfer.effectAllowed = "move";
-      try{ e.dataTransfer.setData("text/plain", dragData.memberId); }catch(err){}
+  });
+
+  document.addEventListener("pointermove", function(e){
+    if(!dragState || e.pointerId !== dragState.pointerId) return;
+    var dx = e.clientX - dragState.startX, dy = e.clientY - dragState.startY;
+    if(!dragState.dragging){
+      if(Math.abs(dx) < 6 && Math.abs(dy) < 6) return;
+      dragState.dragging = true;
+      dragState.chipEl.classList.add("dragging");
+      var rect = dragState.chipEl.getBoundingClientRect();
+      var ghost = dragState.chipEl.cloneNode(true);
+      ghost.classList.add("drag-ghost");
+      ghost.style.width = rect.width + "px";
+      ghost.style.pointerEvents = "none";
+      document.body.appendChild(ghost);
+      dragState.ghost = ghost;
+      document.body.classList.add("dnd-active");
     }
-    chip.classList.add("dragging");
-  });
-  document.addEventListener("dragend", function(e){
-    var chip = e.target.closest ? e.target.closest(".chip") : null;
-    if(chip) chip.classList.remove("dragging");
-    dragData = null;
-  });
-  document.addEventListener("dragover", function(e){
-    var zone = e.target.closest ? e.target.closest("[data-dropzone]") : null;
-    if(!zone || !dragData) return;
+    if(dragState.ghost){
+      dragState.ghost.style.left = e.clientX + "px";
+      dragState.ghost.style.top = e.clientY + "px";
+    }
+    var under = document.elementFromPoint(e.clientX, e.clientY);
+    var slotEl = under ? under.closest("[data-slot]") : null;
+    if(dragState.hoverEl && dragState.hoverEl !== slotEl){
+      dragState.hoverEl.classList.remove("drag-over");
+    }
+    if(slotEl) slotEl.classList.add("drag-over");
+    dragState.hoverEl = slotEl;
     e.preventDefault();
-    zone.classList.add("drag-over");
+  }, { passive: false });
+
+  function endDrag(commit){
+    if(!dragState) return;
+    var wasDragging = dragState.dragging;
+    if(wasDragging){
+      if(dragState.ghost) dragState.ghost.remove();
+      dragState.chipEl.classList.remove("dragging");
+      document.body.classList.remove("dnd-active");
+      if(dragState.hoverEl) dragState.hoverEl.classList.remove("drag-over");
+      if(commit && dragState.hoverEl){
+        var listType = dragState.hoverEl.getAttribute("data-list-type");
+        var index = +dragState.hoverEl.getAttribute("data-index");
+        var isPlaceholder = dragState.hoverEl.getAttribute("data-placeholder") === "true";
+        performTransfer(
+          { listType: dragState.listType, index: dragState.index },
+          { listType: listType, index: index, isPlaceholder: isPlaceholder }
+        );
+        ui.armed = null;
+        renderApp();
+        scheduleSave();
+      }
+      suppressNextClick = true;
+      // A synthetic click doesn't reliably follow a drag whose pointerup
+      // landed on a different element than the pointerdown did (browsers
+      // vary), so don't leave this flag permanently stuck if no click
+      // ever arrives to consume it. If a click DOES follow, it fires
+      // synchronously right after pointerup -- before this timeout runs
+      // -- so it still sees the flag as true and consumes it normally.
+      setTimeout(function(){ suppressNextClick = false; }, 0);
+    }
+    dragState = null;
+  }
+  document.addEventListener("pointerup", function(e){
+    if(!dragState || e.pointerId !== dragState.pointerId) return;
+    endDrag(true);
   });
-  document.addEventListener("dragleave", function(e){
-    var zone = e.target.closest ? e.target.closest("[data-dropzone]") : null;
-    if(zone) zone.classList.remove("drag-over");
-  });
-  document.addEventListener("drop", function(e){
-    var zone = e.target.closest ? e.target.closest("[data-dropzone]") : null;
-    if(!zone || !dragData){ return; }
-    e.preventDefault();
-    zone.classList.remove("drag-over");
-    if(!requireWriter()){ dragData = null; return; }
-    var targetLoc = { type: zone.getAttribute("data-loc-type"), idx: zone.hasAttribute("data-loc-idx") ? +zone.getAttribute("data-loc-idx") : undefined };
-    moveMember(dragData.memberId, dragData.loc, targetLoc);
-    dragData = null;
-    ui.armed = null;
-    renderApp();
-    scheduleSave();
+  document.addEventListener("pointercancel", function(e){
+    if(!dragState || e.pointerId !== dragState.pointerId) return;
+    endDrag(false);
   });
 
   /* ---------------- boot ---------------- */
