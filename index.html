@@ -105,6 +105,20 @@
   header.app-header .title-row{ display:flex; align-items:baseline; gap:10px; flex-wrap:wrap; }
   header.app-header h1{ font-size:20px; font-weight:900; margin:0; letter-spacing:.02em; }
   header.app-header .tagline{ font-size:12px; color:rgba(243,247,251,.68); margin:2px 0 0; }
+  .version-tag{
+    appearance:none; border:1px solid rgba(243,247,251,.35); background:rgba(243,247,251,.08);
+    color:rgba(243,247,251,.92); font-size:11.5px; font-weight:700; letter-spacing:.02em;
+    padding:2px 9px; border-radius:999px; cursor:pointer; line-height:1.6;
+  }
+  .version-tag:hover{ background:rgba(243,247,251,.16); }
+  .changelog-entry{ padding:12px 0; border-bottom:1px solid var(--border); }
+  .changelog-entry:last-child{ border-bottom:none; padding-bottom:0; }
+  .changelog-entry:first-child{ padding-top:0; }
+  .changelog-entry-head{ display:flex; align-items:baseline; gap:8px; flex-wrap:wrap; margin-bottom:6px; }
+  .changelog-ver{ font-weight:900; font-size:14.5px; color:var(--text); }
+  .changelog-date{ font-size:12px; color:var(--text-muted); }
+  .changelog-entry ul{ margin:0; padding-left:20px; }
+  .changelog-entry li{ font-size:13.5px; color:var(--text); margin:3px 0; line-height:1.5; }
 
   nav.tabs{
     display:flex;
@@ -340,6 +354,7 @@
   <header class="app-header">
     <div class="title-row">
       <h1>チーム名簿マネージャー</h1>
+      <button type="button" class="version-tag" id="version-tag" data-action="open-changelog">v1.4.0</button>
     </div>
     <p class="tagline">メンバー登録・大会参加者・サーブ順をまとめて管理</p>
     <div class="header-actions">
@@ -375,6 +390,49 @@
   var LS_KEY = "roster_manager_state_v1";
   var GENDERS = ["男性","女性","その他","回答しない"];
 
+  var APP_VERSION = "1.4.0";
+  var CHANGELOG = [
+    {
+      version: "1.4.0",
+      date: "2026-08-31",
+      items: [
+        "ヘッダーにバージョン表示を追加し、タップすると更新履歴を確認できるようにしました。"
+      ]
+    },
+    {
+      version: "1.3.0",
+      date: "2026-08-31",
+      items: [
+        "サーブ順画面で「参加メンバー（未配置）」の表示をコート・控えの上に移動しました。",
+        "セット名（「第1セット」など）を自由に変更できるようにしました。"
+      ]
+    },
+    {
+      version: "1.2.0",
+      date: "2026-08-24",
+      items: [
+        "サーブ順のUIを刷新：参加メンバーをタップすると、コート1番手→控えの順に自動で登録されるようにしました。",
+        "コート/控えの入力モードが分かるバッジ表示を追加しました。",
+        "サーブ順の並び替えをドラッグ&ドロップ対応(プレイリスト形式の並び替え・控えとコート間の入れ替え)にしました。",
+        "背番号バッジとサーブ順バッジの見分けがつきやすいよう、性別で色分け(女性はピンク系)しました。"
+      ]
+    },
+    {
+      version: "1.1.0",
+      date: "2026-08-17",
+      items: [
+        "入力フォームのモーダルで、入力欄をタップすると画面が閉じてしまう不具合を修正しました。"
+      ]
+    },
+    {
+      version: "1.0.0",
+      date: "2026-08-10",
+      items: [
+        "初回リリース：メンバー管理、大会・参加者管理、サーブ順（9人制）管理機能を公開しました。"
+      ]
+    }
+  ];
+
   var appState = null;
   var ui = {
     activeTab: "members",
@@ -386,6 +444,8 @@
     saveStatus: "idle",
     memberModal: null,
     tournamentModal: null,
+    setLabelModal: null,
+    changelogModal: false,
     confirmDeleteMember: null,
     confirmDeleteTournament: null,
     confirmDeleteSet: null,
@@ -443,6 +503,7 @@
         t.sets.forEach(function(st){
           st.order = normalizeSlots(st.order, 9);
           st.bench = normalizeSlots(st.bench, 6);
+          st.label = (typeof st.label === "string") ? st.label : "";
         });
         return t;
       });
@@ -565,6 +626,10 @@
       ui.currentSetId = t.sets.length ? t.sets[0].id : null;
     }
   }
+  function setLabel(s, i){
+    if(s && typeof s.label === "string" && s.label.trim()) return s.label;
+    return "第" + (i+1) + "セット";
+  }
 
   function requireWriter(){
     return true;
@@ -649,6 +714,26 @@
     return appState.tournaments.find(function(t){ return t.id === id; });
   }
 
+  function setById(id){
+    var t = currentTournament();
+    if(!t) return null;
+    return (t.sets||[]).find(function(s){ return s.id === id; }) || null;
+  }
+
+  function saveSetLabelFromForm(id){
+    var label = document.getElementById("sf-label").value.trim();
+    var errEl = document.getElementById("form-error");
+    if(!label){
+      if(errEl) errEl.textContent = "名称を入力してください";
+      return;
+    }
+    var s = setById(id);
+    if(s) s.label = label;
+    closeModal();
+    renderApp();
+    scheduleSave();
+  }
+
   function toggleParticipant(memberId){
     var t = currentTournament();
     if(!t) return;
@@ -671,7 +756,7 @@
     var t = currentTournament();
     if(!t) return;
     if(!t.sets) t.sets = [];
-    var s = { id: uid("set_"), order: [], bench: [] };
+    var s = { id: uid("set_"), order: [], bench: [], label: "" };
     t.sets.push(s);
     ui.currentSetId = s.id;
     renderApp();
@@ -986,7 +1071,7 @@
     var sets = t.sets || [];
     html += '<div class="set-pills" style="margin-top:16px;">';
     sets.forEach(function(s, i){
-      html += '<button type="button" class="set-pill' + (s.id===ui.currentSetId?' active':'') + '" data-action="select-set" data-id="' + s.id + '">第' + (i+1) + 'セット</button>';
+      html += '<button type="button" class="set-pill' + (s.id===ui.currentSetId?' active':'') + '" data-action="select-set" data-id="' + s.id + '">' + escapeHtml(setLabel(s, i)) + '</button>';
     });
     if(ui.isWriter){
       html += '<button type="button" class="btn btn-sm" data-action="add-set">+ セットを追加</button>';
@@ -1001,7 +1086,8 @@
 
     var setIdx = sets.findIndex(function(s){ return s.id === set.id; });
     if(ui.isWriter){
-      html += '<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">';
+      html += '<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;align-items:center;">';
+      html += '<button type="button" class="btn btn-sm btn-ghost" data-action="edit-set-label" data-id="' + set.id + '">✎ 名称を変更</button>';
       if(setIdx > 0){
         var curEmpty = set.order.length === 0 && set.bench.length === 0;
         if(curEmpty){
@@ -1023,20 +1109,6 @@
     set.bench.forEach(function(id){ assigned[id] = true; });
     var pool = t.participantIds.filter(function(id){ return !assigned[id]; }).map(memberById).filter(Boolean);
     pool = sortedMembers(pool);
-
-    html += '<div class="serve-layout">';
-    html += '<div class="court-col"><div class="col-label"><span>コート（1〜9番手）</span></div><div class="slot-list">';
-    for(var i=0;i<9;i++){
-      html += slotHtml("order", i, set.order[i] || null);
-    }
-    html += '</div></div>';
-
-    html += '<div class="bench-col"><div class="col-label"><span>控え（6枠）</span></div><div class="slot-list">';
-    for(var j=0;j<6;j++){
-      html += slotHtml("bench", j, set.bench[j] || null);
-    }
-    html += '</div></div>';
-    html += '</div>';
 
     var orderFull = set.order.length >= 9;
     var benchFull = set.bench.length >= 6;
@@ -1063,6 +1135,20 @@
     html += '</div>';
     html += '<p class="hint">参加メンバーをタップすると、コート→控えの順に自動で追加されます。並び替えはチップをドラッグ、またはタップして選択してから移動先をタップします。' + (ui.isWriter?'':' (読み取り専用のため編集できません)') + '</p>';
 
+    html += '<div class="serve-layout">';
+    html += '<div class="court-col"><div class="col-label"><span>コート（1〜9番手）</span></div><div class="slot-list">';
+    for(var i=0;i<9;i++){
+      html += slotHtml("order", i, set.order[i] || null);
+    }
+    html += '</div></div>';
+
+    html += '<div class="bench-col"><div class="col-label"><span>控え（6枠）</span></div><div class="slot-list">';
+    for(var j=0;j<6;j++){
+      html += slotHtml("bench", j, set.bench[j] || null);
+    }
+    html += '</div></div>';
+    html += '</div>';
+
     return html;
   }
 
@@ -1071,6 +1157,8 @@
   function closeModal(){
     ui.memberModal = null;
     ui.tournamentModal = null;
+    ui.setLabelModal = null;
+    ui.changelogModal = false;
     ui.pendingImport = null;
     renderModalRoot();
   }
@@ -1078,11 +1166,15 @@
     var root = document.getElementById("modal-root");
     if(ui.memberModal) root.innerHTML = renderMemberModal(ui.memberModal.id);
     else if(ui.tournamentModal) root.innerHTML = renderTournamentModal(ui.tournamentModal.id);
+    else if(ui.setLabelModal) root.innerHTML = renderSetLabelModal(ui.setLabelModal.id);
+    else if(ui.changelogModal) root.innerHTML = renderChangelogModal();
     else if(ui.pendingImport) root.innerHTML = renderImportModal();
     else root.innerHTML = "";
   }
   function openMemberModal(id){ ui.memberModal = { id: id }; renderModalRoot(); }
   function openTournamentModal(id){ ui.tournamentModal = { id: id }; renderModalRoot(); }
+  function openSetLabelModal(id){ ui.setLabelModal = { id: id }; renderModalRoot(); }
+  function openChangelogModal(){ ui.changelogModal = true; renderModalRoot(); }
 
   function renderMemberModal(id){
     var m = id ? memberById(id) : null;
@@ -1128,6 +1220,43 @@
     return html;
   }
 
+  function renderSetLabelModal(id){
+    var sets = (currentTournament() || {}).sets || [];
+    var idx = sets.findIndex(function(s){ return s.id === id; });
+    var s = idx >= 0 ? sets[idx] : null;
+    var title = "セット名を変更";
+    var html = '<div class="modal-overlay" data-action="close-modal-overlay">';
+    html += '<div class="modal-card" role="dialog" aria-modal="true" aria-label="' + title + '">';
+    html += '<h3>' + title + '</h3>';
+    html += '<div class="form-error" id="form-error"></div>';
+    html += '<div class="field"><label for="sf-label">セット名 *</label><input id="sf-label" value="' + escapeHtml(s ? setLabel(s, idx) : "") + '"></div>';
+    html += '<div class="modal-actions">';
+    html += '<button type="button" class="btn" data-action="close-modal">キャンセル</button>';
+    html += '<button type="button" class="btn btn-primary" data-action="save-set-label" data-id="' + (id||"") + '">保存</button>';
+    html += '</div></div></div>';
+    return html;
+  }
+
+  function renderChangelogModal(){
+    var title = "更新履歴";
+    var html = '<div class="modal-overlay" data-action="close-modal-overlay">';
+    html += '<div class="modal-card" role="dialog" aria-modal="true" aria-label="' + title + '">';
+    html += '<h3>' + title + '<span style="font-weight:400;font-size:12.5px;color:var(--text-muted);margin-left:8px;">現在のバージョン: v' + escapeHtml(APP_VERSION) + '</span></h3>';
+    CHANGELOG.forEach(function(entry){
+      html += '<div class="changelog-entry">';
+      html += '<div class="changelog-entry-head"><span class="changelog-ver">v' + escapeHtml(entry.version) + '</span><span class="changelog-date">' + escapeHtml(entry.date) + '</span></div>';
+      html += '<ul>';
+      entry.items.forEach(function(item){
+        html += '<li>' + escapeHtml(item) + '</li>';
+      });
+      html += '</ul></div>';
+    });
+    html += '<div class="modal-actions">';
+    html += '<button type="button" class="btn btn-primary" data-action="close-modal">閉じる</button>';
+    html += '</div></div></div>';
+    return html;
+  }
+
   function renderImportModal(){
     var data = ui.pendingImport || {};
     var memberCount = Array.isArray(data.members) ? data.members.length : 0;
@@ -1150,6 +1279,9 @@
       case "switch-tab":
         ui.activeTab = el.getAttribute("data-tab");
         renderApp();
+        break;
+      case "open-changelog":
+        openChangelogModal();
         break;
       case "add-member":
         if(!requireWriter()) break;
@@ -1215,6 +1347,14 @@
       case "add-set":
         if(!requireWriter()) break;
         addSet();
+        break;
+      case "edit-set-label":
+        if(!requireWriter()) break;
+        openSetLabelModal(el.getAttribute("data-id"));
+        break;
+      case "save-set-label":
+        if(!requireWriter()) break;
+        saveSetLabelFromForm(el.getAttribute("data-id"));
         break;
       case "select-set":
         ui.currentSetId = el.getAttribute("data-id");
@@ -1393,6 +1533,8 @@
   /* ---------------- boot ---------------- */
 
   async function boot(){
+    var vtag = document.getElementById("version-tag");
+    if(vtag) vtag.textContent = "v" + APP_VERSION;
     appState = await loadInitialState();
     renderApp();
     ui.saveStatus = "saved";
