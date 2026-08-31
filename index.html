@@ -257,7 +257,7 @@
 
   .chip{
     display:flex; align-items:center; gap:8px; background:var(--surface); border:1.5px solid var(--border);
-    border-radius:9px; padding:6px 8px; cursor:grab; flex:1; min-width:0;
+    border-radius:9px; padding:6px 8px; flex:1; min-width:0;
   }
   .chip.armed{ border-color:var(--accent); box-shadow:0 0 0 2px var(--accent-soft); }
   .chip.dragging{ opacity:.4; }
@@ -265,6 +265,14 @@
   .chip .cname{ font-size:13px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .chip .rm{ flex:none; margin-left:auto; background:none; border:none; color:var(--text-muted); cursor:pointer; font-size:15px; line-height:1; padding:2px 4px; }
   .chip .rm:hover{ color:var(--danger); }
+  .chip-handle{
+    flex:none; width:30px; height:30px; margin:-4px 0 -4px -6px; border-radius:7px;
+    display:flex; align-items:center; justify-content:center;
+    font-size:16px; line-height:1; color:var(--text-muted); cursor:grab;
+    touch-action:none; -webkit-user-select:none; user-select:none; -webkit-touch-callout:none;
+  }
+  .chip-handle:hover{ background:var(--surface-2); color:var(--text); }
+  .chip.dragging .chip-handle{ cursor:grabbing; }
 
   .pool-zone{
     border:1.5px dashed var(--border); border-radius:12px; padding:10px; margin-top:8px; min-height:60px;
@@ -319,7 +327,7 @@
     border-radius:5px; padding:1px 5px; letter-spacing:.02em;
   }
 
-  .chip[data-slot-chip]{ touch-action:none; -webkit-user-select:none; user-select:none; -webkit-touch-callout:none; }
+  .chip[data-slot-chip]{ -webkit-user-select:none; user-select:none; -webkit-touch-callout:none; }
   .drag-ghost{
     position:fixed; top:0; left:0; z-index:999; pointer-events:none; opacity:.95;
     box-shadow:0 10px 28px rgba(20,30,45,.28); transform:translate(-50%,-50%) rotate(-2deg);
@@ -354,7 +362,7 @@
   <header class="app-header">
     <div class="title-row">
       <h1>チーム名簿マネージャー</h1>
-      <button type="button" class="version-tag" id="version-tag" data-action="open-changelog">v1.4.0</button>
+      <button type="button" class="version-tag" id="version-tag" data-action="open-changelog">v1.5.0</button>
     </div>
     <p class="tagline">メンバー登録・大会参加者・サーブ順をまとめて管理</p>
     <div class="header-actions">
@@ -390,8 +398,16 @@
   var LS_KEY = "roster_manager_state_v1";
   var GENDERS = ["男性","女性","その他","回答しない"];
 
-  var APP_VERSION = "1.4.0";
+  var APP_VERSION = "1.5.0";
   var CHANGELOG = [
+    {
+      version: "1.5.0",
+      date: "2026-08-31",
+      items: [
+        "サーブ順の並び替えで、画面をスクロールしようとしただけで誤ってメンバーが選択・移動してしまう不具合を修正しました。",
+        "並び替えは、メンバー枠の左端にあるハンドル（⠿）をつまんで操作する方式に変更しました（それ以外の場所は今まで通りタップでの選択・スクロールに使えます）。"
+      ]
+    },
     {
       version: "1.4.0",
       date: "2026-08-31",
@@ -1022,6 +1038,9 @@
     var html = '<div class="chip' + (isArmed?' armed':'') + '"' +
       (ui.isWriter ? ' data-slot-chip' : '') +
       ' data-list-type="' + listType + '" data-index="' + index + '" data-member-id="' + m.id + '" tabindex="0">';
+    if(ui.isWriter){
+      html += '<span class="chip-handle" aria-hidden="true">⠿</span>';
+    }
     html += '<span class="cn num"' + genderAttr(m.gender) + '>' + escapeHtml(m.number||"-") + '</span>';
     html += benchTag;
     html += '<span class="cname">' + escapeHtml(label) + '</span>';
@@ -1440,12 +1459,19 @@
    * if the target is an empty placeholder). A plain tap (no movement
    * past the threshold) falls through to handleSlotClick via the click
    * listener above, EXCEPT a click that immediately follows a real drag,
-   * which is suppressed so the drop isn't also treated as a tap. */
+   * which is suppressed so the drop isn't also treated as a tap.
+   *
+   * The drag gesture only starts from the small grip handle on the left
+   * of the chip (".chip-handle"), not the whole chip -- otherwise, on
+   * touch devices, a plain vertical swipe to scroll the page that happens
+   * to start on a chip gets hijacked into a drag every time. Tapping
+   * elsewhere on the chip still arms/selects it via the click listener. */
   document.addEventListener("pointerdown", function(e){
     if(!ui.isWriter) return;
     if(e.pointerType === "mouse" && e.button !== 0) return;
-    if(e.target.closest('[data-action="remove-from-slot"]')) return;
-    var chip = e.target.closest(".chip[data-slot-chip]");
+    var handle = e.target.closest(".chip-handle");
+    if(!handle) return;
+    var chip = handle.closest(".chip[data-slot-chip]");
     if(!chip) return;
     dragState = {
       pointerId: e.pointerId,
