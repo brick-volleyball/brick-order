@@ -1139,7 +1139,12 @@
   document.addEventListener("click", function(e){
     var el = e.target.closest("[data-action]");
     if(!el) return;
-    handleAction(el.getAttribute("data-action"), el);
+    var action = el.getAttribute("data-action");
+    // The overlay's "close on backdrop click" must only fire when the
+    // backdrop itself was clicked, not when a click inside the modal
+    // card (an input, a label, ...) bubbles up to it.
+    if(action === "close-modal-overlay" && e.target !== el) return;
+    handleAction(action, el);
   });
 
   document.addEventListener("change", function(e){
